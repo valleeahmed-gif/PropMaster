@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
-import { Session, User as SupabaseUser } from '@supabase/supabase-js';
+import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import {
-  User, Property, Tenant, Lease, PropertyCost, UtilityBreakdown,
+  User, UserRole, Property, Tenant, Lease, PropertyCost, UtilityBreakdown,
   Invoice, Payment, MaintenanceRequest, StatementUpload, Toast
 } from '../types';
 import { generateId, today } from '../utils';
@@ -170,19 +170,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Auth state listener ───────────────────────────────────
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
       setSession(s);
       if (s?.user) {
-        setUser({ id: s.user.id, name: s.user.user_metadata?.name || s.user.email || '', email: s.user.email || '', role: 'landlord', createdAt: s.user.created_at });
+        const { data: roleRow } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', s.user.id)
+          .single();
+        const role: UserRole = (roleRow?.role as UserRole) ?? 'landlord';
+        setUser({ id: s.user.id, name: s.user.user_metadata?.name || s.user.email || '', email: s.user.email || '', role, createdAt: s.user.created_at });
         refreshData();
       }
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
       setSession(s);
       if (s?.user) {
-        setUser({ id: s.user.id, name: s.user.user_metadata?.name || s.user.email || '', email: s.user.email || '', role: 'landlord', createdAt: s.user.created_at });
+        const { data: roleRow } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', s.user.id)
+          .single();
+        const role: UserRole = (roleRow?.role as UserRole) ?? 'landlord';
+        setUser({ id: s.user.id, name: s.user.user_metadata?.name || s.user.email || '', email: s.user.email || '', role, createdAt: s.user.created_at });
         refreshData();
       } else {
         setUser(null);

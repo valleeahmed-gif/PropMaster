@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, Send, CreditCard, Trash2, ChevronDown, ChevronUp, Edit2, AlertTriangle } from 'lucide-react';
+import { Plus, FileText, Send, CreditCard, Trash2, ChevronDown, ChevronUp, Edit2, AlertTriangle, Mail } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Modal, ConfirmDialog, EmptyState, StatusBadge, Field, Select } from '../../components/UI';
 import { RecordPaymentModal } from '../../components/RecordPaymentModal';
 import { Invoice, InvoiceLineItem } from '../../types';
 import { formatCurrency, formatDate, formatMonthYear, MONTHS } from '../../utils';
+import { supabase } from '../../lib/supabase';
 
 interface Props { propertyId: string; }
 
@@ -364,12 +365,13 @@ function EditInvoiceModal({ invoice, onClose }: { invoice: Invoice; onClose: () 
 }
 
 // ── Invoice Row ────────────────────────────────────────────
-function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete }: {
+function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete, onSendEmail }: {
   inv: Invoice;
   onMarkSent: (inv: Invoice) => void;
   onRecordPayment: (inv: Invoice) => void;
   onEdit: (inv: Invoice) => void;
   onDelete: (inv: Invoice) => void;
+  onSendEmail: (inv: Invoice) => void;
 }) {
   const { payments } = useApp();
   const [expanded, setExpanded] = useState(false);
@@ -407,8 +409,11 @@ function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete }: {
                 <button onClick={() => onEdit(inv)} className="btn-secondary text-xs px-2 py-1.5 gap-1">
                   <Edit2 size={11} /> Edit
                 </button>
+                <button onClick={() => onSendEmail(inv)} className="btn-primary text-xs px-2 py-1.5 gap-1">
+                  <Mail size={11} /> Send email
+                </button>
                 <button onClick={() => onMarkSent(inv)} className="btn-secondary text-xs px-2 py-1.5 gap-1">
-                  <Send size={11} /> Send
+                  <Send size={11} /> Mark sent
                 </button>
                 <button onClick={() => onDelete(inv)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500">
                   <Trash2 size={13} />
@@ -416,9 +421,14 @@ function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete }: {
               </>
             )}
             {(inv.status === 'sent' || inv.status === 'overdue') && (
-              <button onClick={() => onRecordPayment(inv)} className="btn-primary text-xs px-2.5 py-1.5 gap-1">
-                <CreditCard size={12} /> Record payment
-              </button>
+              <>
+                <button onClick={() => onSendEmail(inv)} className="btn-secondary text-xs px-2 py-1.5 gap-1">
+                  <Mail size={11} /> Resend
+                </button>
+                <button onClick={() => onRecordPayment(inv)} className="btn-primary text-xs px-2.5 py-1.5 gap-1">
+                  <CreditCard size={12} /> Record payment
+                </button>
+              </>
             )}
             <button onClick={e => { e.stopPropagation(); setExpanded(x => !x); }} className="p-1.5 text-gray-400 hover:text-gray-600">
               {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -475,6 +485,7 @@ export function InvoicesTab({ propertyId }: Props) {
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
   const [deletingInvoice, setDeletingInvoice] = useState<Invoice | null>(null);
+  const [sendingInvoiceId, setSendingInvoiceId] = useState<string | null>(null);
 
   const propInvoices = [...invoices.filter(i => i.propertyId === propertyId)]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -482,6 +493,30 @@ export function InvoicesTab({ propertyId }: Props) {
   const handleMarkSent = async (inv: Invoice) => {
     await updateInvoice(inv.id, { status: 'sent' });
     showToast(`${inv.invoiceNumber} marked as sent`);
+  };
+
+  const handleSendEmail = async (inv: Invoice) => {
+    setSendingInvoiceId(inv.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Not authenticated');
+      const res = await fetch(
+        'https://cghiodbvbggizghxuvna.supabase.co/functions/v1/send-invoice',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+          body: JSON.stringify({ invoiceId: inv.id }),
+        }
+      );
+      const result = await res.json();
+      if (!res.ok || !result.success) throw new Error(result.error || 'Failed to send');
+      await updateInvoice(inv.id, { status: 'sent' });
+      showToast(`Invoice emailed to ${result.sentTo}`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to send invoice', 'error');
+    } finally {
+      setSendingInvoiceId(null);
+    }
   };
 
   const handleDelete = async () => {
@@ -528,6 +563,7 @@ export function InvoicesTab({ propertyId }: Props) {
               onRecordPayment={setPayingInvoice}
               onEdit={setEditingInvoice}
               onDelete={setDeletingInvoice}
+              onSendEmail={handleSendEmail}
             />
           ))}
         </div>

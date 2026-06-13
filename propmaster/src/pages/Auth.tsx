@@ -8,8 +8,8 @@ import { LogoIcon } from '../components/Logo';
 export function LoginPage() {
   const navigate = useNavigate();
   const { login, showToast } = useApp();
-  const [email, setEmail] = useState('ahmed@propmaster.co.za');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -98,9 +98,6 @@ export function LoginPage() {
           </p>
         </div>
 
-        <p className="text-center text-xs text-gray-400 mt-4">
-          Demo: ahmed@propmaster.co.za / any password
-        </p>
       </div>
     </div>
   );

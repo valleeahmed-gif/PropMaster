@@ -60,7 +60,7 @@ function PaymentModal({ open, onClose, propertyId }: { open: boolean; onClose: (
             <Select
               value={form.method}
               onChange={e => setForm(f => ({ ...f, method: e.target.value }))}
-              options={[{ value: 'bank_transfer', label: 'EFT / Bank Transfer' }, { value: 'cash', label: 'Cash' }, { value: 'payfast', label: 'PayFast' }, { value: 'other', label: 'Other' }]}
+              options={[{ value: 'eft', label: 'EFT / Bank Transfer' }, { value: 'cash', label: 'Cash' }, { value: 'payfast', label: 'PayFast' }, { value: 'other', label: 'Other' }]}
             />
           </Field>
         </div>

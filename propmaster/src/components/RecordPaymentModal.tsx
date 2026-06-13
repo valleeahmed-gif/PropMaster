@@ -15,7 +15,7 @@ interface RecordPaymentModalProps {
 }
 
 const METHODS = [
-  { value: 'bank_transfer', label: 'EFT / Bank Transfer' },
+  { value: 'eft', label: 'EFT / Bank Transfer' },
   { value: 'cash', label: 'Cash' },
   { value: 'payfast', label: 'PayFast' },
   { value: 'other', label: 'Other' },
@@ -40,7 +40,7 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
   const [form, setForm] = useState({
     amount: '',
     paymentDate: today(),
-    method: 'bank_transfer',
+    method: 'eft',
     linkedInvoiceId: '',
     notes: '',
   });
@@ -53,7 +53,7 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
       setForm({
         amount: invoice ? String(invoice.totalAmount) : '',
         paymentDate: today(),
-        method: 'bank_transfer',
+        method: 'eft',
         linkedInvoiceId: invoice?.id ?? '',
         notes: '',
       });

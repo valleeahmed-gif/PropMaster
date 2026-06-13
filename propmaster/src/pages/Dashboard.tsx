@@ -1,13 +1,23 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Users, TrendingUp, AlertCircle, Plus, ChevronRight, Wrench, FileText, CreditCard } from 'lucide-react';
+import { Building2, Users, TrendingUp, AlertCircle, ChevronRight, Wrench, FileText, CreditCard } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StatCard, StatusBadge, PriorityBadge } from '../components/UI';
 import { formatCurrency, formatDate } from '../utils';
 
+function SkeletonCard() {
+  return (
+    <div className="card p-5">
+      <div className="shimmer h-3 w-16 rounded mb-2" />
+      <div className="shimmer h-7 w-24 rounded mb-1" />
+      <div className="shimmer h-3 w-20 rounded" />
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { properties, leases, invoices, payments, maintenanceRequests, tenants, user } = useApp();
+  const { properties, leases, invoices, payments, maintenanceRequests, tenants, user, dataLoading } = useApp();
 
   const myProperties = properties.filter(p => p.ownerId === user?.id);
   const myLeases = leases.filter(l => l.ownerId === user?.id && l.status === 'active');
@@ -44,10 +54,16 @@ export function DashboardPage() {
 
       {/* Stats — 2 col mobile, 4 col desktop */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8 stagger">
-        <StatCard title="Properties" value={String(myProperties.length)} sub={`${vacantProperties.length} vacant`} icon={<Building2 size={18} />} color="bg-brand-50 text-brand-700" onClick={() => navigate('/properties')} />
-        <StatCard title="Active leases" value={String(myLeases.length)} sub={`of ${tenants.filter(t => t.ownerId === user?.id).length} tenants`} icon={<Users size={18} />} color="bg-teal-50 text-teal-700" onClick={() => navigate('/tenants')} />
-        <StatCard title="Collected" value={formatCurrency(rentThisMonth)} sub={`${sentInvoices.length} awaiting`} icon={<TrendingUp size={18} />} color="bg-green-50 text-green-700" onClick={() => navigate('/payments')} />
-        <StatCard title="Outstanding" value={String(overdueInvoices.length + sentInvoices.length)} sub={`${overdueInvoices.length} overdue`} icon={<AlertCircle size={18} />} color={overdueInvoices.length > 0 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'} onClick={() => navigate('/invoices')} />
+        {dataLoading ? (
+          [1,2,3,4].map(i => <SkeletonCard key={i} />)
+        ) : (
+          <>
+            <StatCard title="Properties" value={String(myProperties.length)} sub={`${vacantProperties.length} vacant`} icon={<Building2 size={18} />} color="bg-brand-50 text-brand-700" onClick={() => navigate('/properties')} />
+            <StatCard title="Active leases" value={String(myLeases.length)} sub={`of ${tenants.filter(t => t.ownerId === user?.id).length} tenants`} icon={<Users size={18} />} color="bg-teal-50 text-teal-700" onClick={() => navigate('/tenants')} />
+            <StatCard title="Collected" value={formatCurrency(rentThisMonth)} sub={`${sentInvoices.length} awaiting`} icon={<TrendingUp size={18} />} color="bg-green-50 text-green-700" onClick={() => navigate('/payments')} />
+            <StatCard title="Outstanding" value={String(overdueInvoices.length + sentInvoices.length)} sub={`${overdueInvoices.length} overdue`} icon={<AlertCircle size={18} />} color={overdueInvoices.length > 0 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'} onClick={() => navigate('/invoices')} />
+          </>
+        )}
       </div>
 
       {/* Quick actions — 2x2 on mobile, 4-col on sm+ */}
