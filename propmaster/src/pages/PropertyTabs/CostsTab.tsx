@@ -1,1 +1,0 @@
-export { CostsTab } from './PaymentsTab';
