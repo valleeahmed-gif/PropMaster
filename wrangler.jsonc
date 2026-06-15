@@ -1,0 +1,7 @@
+{
+  "name": "frosty-silence-c3b1",
+  "compatibility_date": "2026-06-15",
+  "assets": {
+    "directory": "./propmaster/dist"
+  }
+}
