@@ -1,0 +1,30 @@
+{
+  "name": "PropMaster",
+  "short_name": "PropMaster",
+  "description": "Property management for South African landlords",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f1f3f9",
+  "theme_color": "#0e7c64",
+  "icons": [
+    {
+      "src": "/propmaster-logo.png",
+      "type": "image/png",
+      "sizes": "859x859",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}
