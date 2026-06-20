@@ -1,7 +1,7 @@
 // ── App deployment URL ──────────────────────────────────────
 // IMPORTANT: update this when you change hosting providers or custom domains.
 // Used for tenant invite magic links and copy-link fallbacks.
-export const APP_URL = 'https://taupe-dragon-dda422.netlify.app';
+export const APP_URL = 'https://propmastergit.valleeahmed.workers.dev';
 
 export function generateId(): string {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
