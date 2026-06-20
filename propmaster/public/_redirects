@@ -1,0 +1,9 @@
+# Cloudflare Pages redirect rules
+# Order matters — first match wins
+
+# All /app/* routes → React app (SPA fallback)
+# Lets React Router handle /app/login, /app/dashboard, /app/accept-invite etc.
+/app/*  /app/index.html  200
+
+# Root and all other paths → landing page
+/*      /index.html      200
