@@ -1,0 +1,15 @@
+name = "propmastergit"
+compatibility_date = "2026-06-01"
+
+# Serve the built static site as Worker assets.
+# This is the modern Wrangler way to deploy a plain SPA via `wrangler deploy`
+# instead of a script-based Worker — it serves files from dist/ directly.
+#
+# We use "none" here (not "single-page-application") because this project
+# has TWO separate entry points — a landing page at / and a React app at
+# /app — handled by public/_redirects, which Wrangler's asset server also
+# honors. Setting single-page-application here would override that and
+# break the landing page.
+[assets]
+directory = "./dist"
+not_found_handling = "none"
