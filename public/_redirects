@@ -9,6 +9,11 @@
 # of the literal file — Cloudflare serves index.html for a directory path
 # without re-triggering the redirect rule.
 
+# Legacy bare paths → redirect to the /app/ prefix so old bookmarks and
+# any links from the old landing page still work.
+/login   /app/login   301
+/signup  /app/signup  301
+
 # All /app/* routes → React app (SPA fallback)
 # Lets React Router handle /app/login, /app/dashboard, /app/accept-invite etc.
 /app    /app/  200
