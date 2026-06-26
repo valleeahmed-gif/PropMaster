@@ -11,6 +11,7 @@
 
 # All /app/* routes → React app (SPA fallback)
 # Lets React Router handle /app/login, /app/dashboard, /app/accept-invite etc.
+/app    /app/  200
 /app/*  /app/  200
 
 # Root and all other paths → landing page
