@@ -1,15 +1,16 @@
-name = "propmastergit"
+name = "propmaster"
+main = "worker.js"
 compatibility_date = "2026-06-01"
 
-# Serve the built static site as Worker assets.
-# This is the modern Wrangler way to deploy a plain SPA via `wrangler deploy`
-# instead of a script-based Worker — it serves files from dist/ directly.
+# Bind the built static files so the Worker can serve them via env.ASSETS.
+# The Worker (worker.js) handles SPA fallback for the two entry points:
+#   /            → landing page (dist/index.html)
+#   /app/*       → React app    (dist/app/index.html)
 #
-# We use "none" here (not "single-page-application") because this project
-# has TWO separate entry points — a landing page at / and a React app at
-# /app — handled by public/_redirects, which Wrangler's asset server also
-# honors. Setting single-page-application here would override that and
-# break the landing page.
+# We use a Worker script + ASSETS binding instead of a bare [assets] static
+# deployment because this project has TWO separate HTML entry points and the
+# plain _redirects approach hit Cloudflare's ".html-stripping" infinite-loop
+# detection. Explicit Worker routing avoids that entirely.
 [assets]
 directory = "./dist"
-not_found_handling = "none"
+binding = "ASSETS"
