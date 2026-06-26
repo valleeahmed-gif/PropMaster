@@ -1,4 +1,4 @@
-name = "propmastergit"
+name = "propmaster"
 compatibility_date = "2026-06-01"
 
 # Serve the built static site as Worker assets.
