@@ -19,14 +19,31 @@ export type Province =
   | 'Free State'
   | 'Northern Cape';
 
+export type PropertyCategory = 'residential' | 'commercial' | 'industrial';
+export type PropertyType =
+  | 'apartment' | 'bungalow' | 'cluster' | 'complex' | 'cottage' | 'farm'
+  | 'small_holding' | 'flat' | 'house' | 'retirement' | 'room' | 'townhouse'
+  | 'sectional_title' | 'freehold';
+export type BathroomType = 'shower_only' | 'ensuite' | 'shower_on_tub';
+
 export interface Property {
   id: string;
   ownerId: string;
   name: string;
   address: string;
+  suburb?: string;
+  postalCode?: string;
   city: string;
   province: Province;
-  rentAmount: number;
+  category?: PropertyCategory;
+  propertyType?: PropertyType;
+  bedrooms?: number;
+  bathrooms?: number;
+  bathroomType?: BathroomType;
+  floor?: string;
+  block?: string;
+  /** Legacy — rent now lives on the lease. Kept optional for back-compat. */
+  rentAmount?: number;
   unitNumber?: string;
   erfSize?: number;
   leaseStart?: string;
@@ -34,24 +51,47 @@ export interface Property {
   createdAt: string;
 }
 
+export type CustomerType = 'individual' | 'business';
+
 export interface Tenant {
   id: string;
   ownerId: string;
   userId?: string;
+  customerType: CustomerType;
+  firstName?: string;
+  lastName?: string;
+  /** Display name — derived from first/last (individual) or business name. */
   name: string;
+  idNumber?: string;
+  countryIssuing?: string;
   email: string;
+  secondaryEmail?: string;
+  landline?: string;
+  /** Cell number. */
   phone: string;
+  businessAddress?: string;
+  businessAddress2?: string;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankBranchCode?: string;
   inviteStatus: 'none' | 'pending' | 'accepted';
   createdAt: string;
 }
+
+export type LeaseType = 'fixed_term' | 'month_to_month';
+export type RentFrequency = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
 
 export interface Lease {
   id: string;
   propertyId: string;
   tenantId: string;
   ownerId: string;
+  leaseType: LeaseType;
   startDate: string;
+  durationMonths?: number;
   endDate?: string;
+  rentFrequency: RentFrequency;
+  dueDay?: number;
   rentAmount: number;
   depositPaid: number;
   status: 'active' | 'ended' | 'pending';

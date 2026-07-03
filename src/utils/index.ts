@@ -81,3 +81,72 @@ export function currentMonthYear(): { month: number; year: number } {
   const now = new Date();
   return { month: now.getMonth() + 1, year: now.getFullYear() };
 }
+
+// ── Capture-form option lists ───────────────────────────────
+export const PROPERTY_CATEGORIES = [
+  { value: 'residential', label: 'Residential' },
+  { value: 'commercial',  label: 'Commercial' },
+  { value: 'industrial',  label: 'Industrial' },
+];
+
+export const PROPERTY_TYPES = [
+  { value: 'apartment',       label: 'Apartment' },
+  { value: 'bungalow',        label: 'Bungalow' },
+  { value: 'cluster',         label: 'Cluster' },
+  { value: 'complex',         label: 'Complex' },
+  { value: 'cottage',         label: 'Cottage' },
+  { value: 'farm',            label: 'Farm' },
+  { value: 'small_holding',   label: 'Small holding' },
+  { value: 'flat',            label: 'Flat' },
+  { value: 'house',           label: 'House' },
+  { value: 'retirement',      label: 'Retirement' },
+  { value: 'room',            label: 'Room' },
+  { value: 'townhouse',       label: 'Townhouse' },
+  { value: 'sectional_title', label: 'Sectional title' },
+  { value: 'freehold',        label: 'Freehold' },
+];
+
+export const BATHROOM_TYPES = [
+  { value: 'shower_only',   label: 'Shower only' },
+  { value: 'ensuite',       label: 'Ensuite' },
+  { value: 'shower_on_tub', label: 'Shower on tub' },
+];
+
+export const CUSTOMER_TYPES = [
+  { value: 'individual', label: 'Individual' },
+  { value: 'business',   label: 'Business' },
+];
+
+export const LEASE_TYPES = [
+  { value: 'fixed_term',     label: 'Fixed Term Lease' },
+  { value: 'month_to_month', label: 'Month-to-Month' },
+];
+
+export const RENT_FREQUENCIES = [
+  { value: 'monthly',     label: 'Monthly' },
+  { value: 'quarterly',   label: 'Quarterly' },
+  { value: 'half_yearly', label: 'Half-Yearly' },
+  { value: 'yearly',      label: 'Yearly' },
+];
+
+export const DUE_DAYS = Array.from({ length: 31 }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
+
+// Human-readable label lookups for the capture enums.
+export function labelFor(list: { value: string; label: string }[], value?: string): string {
+  return list.find(o => o.value === value)?.label ?? '—';
+}
+
+/**
+ * Compute a lease end date from a start date + duration in months.
+ * The lease runs to the day BEFORE the same date N months later
+ * (e.g. 1 Jan + 12 months → 31 Dec). Returns '' if inputs are incomplete.
+ */
+export function computeLeaseEndDate(startDate: string, durationMonths: number): string {
+  if (!startDate || !durationMonths || durationMonths <= 0) return '';
+  const start = new Date(startDate + 'T00:00:00');
+  if (isNaN(start.getTime())) return '';
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + durationMonths);
+  end.setDate(end.getDate() - 1);
+  return end.toISOString().split('T')[0];
+}

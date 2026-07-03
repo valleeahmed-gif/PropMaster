@@ -4,7 +4,10 @@ import { Plus, Building2, MapPin, ChevronRight, Edit2, Trash2, ArrowLeft } from 
 import { useApp } from '../context/AppContext';
 import { Property, Province } from '../types';
 import { Modal, ConfirmDialog, EmptyState, PageHeader, StatusBadge, Tabs, Field, Select } from '../components/UI';
-import { formatCurrency, formatDate, PROVINCES } from '../utils';
+import {
+  formatCurrency, formatDate, PROVINCES,
+  PROPERTY_CATEGORIES, PROPERTY_TYPES, BATHROOM_TYPES, labelFor,
+} from '../utils';
 import { LeasesTab } from './PropertyTabs/LeasesTab';
 import { InvoicesTab } from './PropertyTabs/InvoicesTab';
 import { PaymentsTab } from './PropertyTabs/PaymentsTab';
@@ -18,33 +21,46 @@ interface PropertyFormProps {
   property?: Property;
 }
 
+const EMPTY_PROPERTY_FORM = {
+  name: '', address: '', suburb: '', postalCode: '', city: '',
+  province: 'Gauteng' as Province, category: '', propertyType: '',
+  bedrooms: '', bathrooms: '', bathroomType: '', floor: '', block: '',
+  unitNumber: '', erfSize: '',
+};
+
 function PropertyForm({ open, onClose, property }: PropertyFormProps) {
   const { addProperty, updateProperty, showToast } = useApp();
-  const [form, setForm] = useState({
-    name: '', address: '', city: '', province: 'Gauteng' as Province,
-    rentAmount: '', unitNumber: '', erfSize: '',
-  });
+  const [form, setForm] = useState(EMPTY_PROPERTY_FORM);
 
   useEffect(() => {
     if (property) {
       setForm({
-        name: property.name, address: property.address, city: property.city,
-        province: property.province, rentAmount: String(property.rentAmount),
-        unitNumber: property.unitNumber || '', erfSize: property.erfSize ? String(property.erfSize) : '',
+        name: property.name, address: property.address,
+        suburb: property.suburb || '', postalCode: property.postalCode || '',
+        city: property.city, province: property.province,
+        category: property.category || '', propertyType: property.propertyType || '',
+        bedrooms: property.bedrooms != null ? String(property.bedrooms) : '',
+        bathrooms: property.bathrooms != null ? String(property.bathrooms) : '',
+        bathroomType: property.bathroomType || '',
+        floor: property.floor || '', block: property.block || '',
+        unitNumber: property.unitNumber || '',
+        erfSize: property.erfSize ? String(property.erfSize) : '',
       });
     } else {
-      setForm({ name: '', address: '', city: '', province: 'Gauteng', rentAmount: '', unitNumber: '', erfSize: '' });
+      setForm(EMPTY_PROPERTY_FORM);
     }
   }, [property, open]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm(f => ({ ...f, [k]: e.target.value }));
+
   const validate = () => {
     const e: Record<string, string> = {};
     if (!form.name.trim()) e.name = 'Property name is required';
-    if (!form.address.trim()) e.address = 'Address is required';
+    if (!form.address.trim()) e.address = 'Street address is required';
     if (!form.city.trim()) e.city = 'City is required';
-    if (!form.rentAmount || isNaN(Number(form.rentAmount)) || Number(form.rentAmount) <= 0) e.rentAmount = 'Valid rent amount required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -52,8 +68,17 @@ function PropertyForm({ open, onClose, property }: PropertyFormProps) {
   const handleSave = () => {
     if (!validate()) return;
     const data = {
-      ...form,
-      rentAmount: Number(form.rentAmount),
+      name: form.name, address: form.address,
+      suburb: form.suburb || undefined,
+      postalCode: form.postalCode || undefined,
+      city: form.city, province: form.province,
+      category: (form.category || undefined) as Property['category'],
+      propertyType: (form.propertyType || undefined) as Property['propertyType'],
+      bedrooms: form.bedrooms ? Number(form.bedrooms) : undefined,
+      bathrooms: form.bathrooms ? Number(form.bathrooms) : undefined,
+      bathroomType: (form.bathroomType || undefined) as Property['bathroomType'],
+      floor: form.floor || undefined,
+      block: form.block || undefined,
       unitNumber: form.unitNumber || undefined,
       erfSize: form.erfSize ? Number(form.erfSize) : undefined,
     };
@@ -66,37 +91,104 @@ function PropertyForm({ open, onClose, property }: PropertyFormProps) {
     <Modal open={open} onClose={onClose} title={property ? 'Edit property' : 'Add property'}>
       <div className="p-6 space-y-4">
         <Field label="Property name" required error={errors.name}>
-          <input className="input" placeholder="e.g. Sandton Heights Apt 4B" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          <input className="input" placeholder="e.g. Sandton Heights Apt 4B" value={form.name} onChange={set('name')} />
         </Field>
-        <Field label="Street address" required error={errors.address}>
-          <input className="input" placeholder="12 Rivonia Road" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+
+        {/* Street address — autocomplete-ready. When a Google Maps Places key is
+            wired (via VITE_GOOGLE_MAPS_API_KEY), this input becomes the anchor
+            for autocomplete that back-fills suburb, postal code and city. */}
+        <Field label="Street address" required error={errors.address} hint="Start typing the street address">
+          <input
+            className="input"
+            placeholder="12 Rivonia Road"
+            value={form.address}
+            onChange={set('address')}
+            autoComplete="off"
+            data-address-autocomplete="street"
+          />
         </Field>
+
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Unit number" hint="Optional — e.g. Apt 4B">
-            <input className="input" placeholder="4B" value={form.unitNumber} onChange={e => setForm(f => ({ ...f, unitNumber: e.target.value }))} />
+          <Field label="Suburb">
+            <input className="input" placeholder="Morningside" value={form.suburb} onChange={set('suburb')} />
           </Field>
-          <Field label="Erf size (m²)" hint="Optional">
-            <input className="input" type="number" inputMode="decimal" placeholder="450" value={form.erfSize} onChange={e => setForm(f => ({ ...f, erfSize: e.target.value }))} />
+          <Field label="Postal code">
+            <input className="input" inputMode="numeric" placeholder="2196" value={form.postalCode} onChange={set('postalCode')} />
           </Field>
         </div>
+
         <div className="grid grid-cols-2 gap-3">
           <Field label="City" required error={errors.city}>
-            <input className="input" placeholder="Sandton" value={form.city} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} />
+            <input className="input" placeholder="Sandton" value={form.city} onChange={set('city')} />
           </Field>
           <Field label="Province" required>
             <Select
               value={form.province}
-              onChange={e => setForm(f => ({ ...f, province: e.target.value as Province }))}
+              onChange={set('province')}
               options={PROVINCES.map(p => ({ value: p, label: p }))}
             />
           </Field>
         </div>
-        <Field label="Monthly rent (ZAR)" required error={errors.rentAmount}>
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">R</span>
-            <input className="input pl-7" placeholder="12 500" type="number" inputMode="decimal" min="0" value={form.rentAmount} onChange={e => setForm(f => ({ ...f, rentAmount: e.target.value }))} />
-          </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Property category">
+            <Select
+              value={form.category}
+              onChange={set('category')}
+              options={PROPERTY_CATEGORIES}
+              placeholder="Select category…"
+            />
+          </Field>
+          <Field label="Property type">
+            <Select
+              value={form.propertyType}
+              onChange={set('propertyType')}
+              options={PROPERTY_TYPES}
+              placeholder="Select type…"
+            />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Bedrooms">
+            <input className="input" type="number" inputMode="numeric" min="0" placeholder="3" value={form.bedrooms} onChange={set('bedrooms')} />
+          </Field>
+          <Field label="Bathrooms">
+            <input className="input" type="number" inputMode="numeric" min="0" placeholder="2" value={form.bathrooms} onChange={set('bathrooms')} />
+          </Field>
+        </div>
+
+        <Field label="Bathroom type">
+          <Select
+            value={form.bathroomType}
+            onChange={set('bathroomType')}
+            options={BATHROOM_TYPES}
+            placeholder="Select bathroom type…"
+          />
         </Field>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Floor" hint="Optional">
+            <input className="input" placeholder="e.g. 3rd" value={form.floor} onChange={set('floor')} />
+          </Field>
+          <Field label="Block" hint="Optional">
+            <input className="input" placeholder="e.g. Block B" value={form.block} onChange={set('block')} />
+          </Field>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Unit number" hint="Optional — e.g. Apt 4B">
+            <input className="input" placeholder="4B" value={form.unitNumber} onChange={set('unitNumber')} />
+          </Field>
+          <Field label="Erf size (m²)" hint="Optional">
+            <input className="input" type="number" inputMode="decimal" placeholder="450" value={form.erfSize} onChange={set('erfSize')} />
+          </Field>
+        </div>
+
+        <p className="text-2xs text-ink-400">
+          Monthly rent is set when you create a lease for this property.
+        </p>
+
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
           <button onClick={handleSave} className="btn-primary flex-1 justify-center">{property ? 'Save changes' : 'Add property'}</button>
@@ -164,7 +256,7 @@ export function PropertiesPage() {
                 <div className="pt-3 border-t border-surface-100 flex items-center justify-between">
                   <div>
                     <p className="text-xs text-gray-500">Monthly rent</p>
-                    <p className="text-sm font-bold text-gray-900">{formatCurrency(prop.rentAmount)}</p>
+                    <p className="text-sm font-bold text-gray-900">{lease ? formatCurrency(lease.rentAmount) : '—'}</p>
                   </div>
                   {tenant && (
                     <div className="text-right">
@@ -243,11 +335,26 @@ export function PropertyDetailPage() {
             <div>
               <h1 className="text-lg font-bold text-gray-900">{property.name}</h1>
               <p className="text-sm text-gray-500 mt-0.5">
-              {property.address}{property.unitNumber ? `, Unit ${property.unitNumber}` : ''}, {property.city}, {property.province}
+              {property.address}{property.unitNumber ? `, Unit ${property.unitNumber}` : ''}
+              {property.suburb ? `, ${property.suburb}` : ''}, {property.city}, {property.province}
+              {property.postalCode ? ` ${property.postalCode}` : ''}
               {property.erfSize ? <span className="ml-2 text-gray-400">· {property.erfSize} m²</span> : ''}
             </p>
+              {(property.propertyType || property.category || property.bedrooms != null || property.bathrooms != null) && (
+                <p className="text-xs text-gray-400 mt-1">
+                  {[
+                    property.propertyType ? labelFor(PROPERTY_TYPES, property.propertyType) : null,
+                    property.category ? labelFor(PROPERTY_CATEGORIES, property.category) : null,
+                    property.bedrooms != null ? `${property.bedrooms} bed` : null,
+                    property.bathrooms != null ? `${property.bathrooms} bath` : null,
+                    property.bathroomType ? labelFor(BATHROOM_TYPES, property.bathroomType) : null,
+                    property.floor ? `Floor ${property.floor}` : null,
+                    property.block ? property.block : null,
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              )}
               <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-600">
-                <span className="font-medium">Rent: {formatCurrency(property.rentAmount)}/mo</span>
+                {activeLease && <span className="font-medium">Rent: {formatCurrency(activeLease.rentAmount)}/mo</span>}
                 {activeLease && <span className="text-green-700">● Active lease</span>}
                 {!activeLease && <span className="text-amber-600">○ Vacant</span>}
               </div>

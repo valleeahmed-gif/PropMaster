@@ -37,17 +37,34 @@ const TenantContext = createContext<TenantContextType | null>(null);
 
 // ── Mappers (row → typed object) ───────────────────────────
 const mapTenant = (r: any): Tenant => ({
-  id: r.id, ownerId: r.owner_id, userId: r.user_id, name: r.name,
-  email: r.email, phone: r.phone || '', inviteStatus: r.invite_status, createdAt: r.created_at,
+  id: r.id, ownerId: r.owner_id, userId: r.user_id,
+  customerType: r.customer_type ?? 'individual',
+  firstName: r.first_name ?? undefined, lastName: r.last_name ?? undefined,
+  name: r.name,
+  idNumber: r.id_number ?? undefined, countryIssuing: r.country_issuing ?? undefined,
+  email: r.email, secondaryEmail: r.secondary_email ?? undefined,
+  landline: r.landline ?? undefined, phone: r.phone || '',
+  businessAddress: r.business_address ?? undefined, businessAddress2: r.business_address_2 ?? undefined,
+  bankName: r.bank_name ?? undefined, bankAccountNumber: r.bank_account_number ?? undefined,
+  bankBranchCode: r.bank_branch_code ?? undefined,
+  inviteStatus: r.invite_status, createdAt: r.created_at,
 });
 const mapLease = (r: any): Lease => ({
   id: r.id, propertyId: r.property_id, tenantId: r.tenant_id, ownerId: r.owner_id,
-  startDate: r.start_date, endDate: r.end_date, rentAmount: r.rent_amount,
+  leaseType: r.lease_type ?? 'fixed_term',
+  startDate: r.start_date, durationMonths: r.duration_months ?? undefined, endDate: r.end_date,
+  rentFrequency: r.rent_frequency ?? 'monthly', dueDay: r.due_day ?? undefined,
+  rentAmount: r.rent_amount,
   depositPaid: r.deposit_paid, status: r.status, createdAt: r.created_at,
 });
 const mapProperty = (r: any): Property => ({
   id: r.id, ownerId: r.owner_id, name: r.name, address: r.address,
-  city: r.city, province: r.province, rentAmount: r.rent_amount,
+  suburb: r.suburb ?? undefined, postalCode: r.postal_code ?? undefined,
+  city: r.city, province: r.province,
+  category: r.category ?? undefined, propertyType: r.property_type ?? undefined,
+  bedrooms: r.bedrooms ?? undefined, bathrooms: r.bathrooms ?? undefined,
+  bathroomType: r.bathroom_type ?? undefined, floor: r.floor ?? undefined, block: r.block ?? undefined,
+  rentAmount: r.rent_amount ?? undefined,
   unitNumber: r.unit_number ?? undefined, erfSize: r.erf_size ?? undefined,
   leaseStart: r.lease_start, leaseEnd: r.lease_end, createdAt: r.created_at,
 });

@@ -64,18 +64,49 @@ const AppContext = createContext<AppContextType | null>(null);
 // ── snake_case → camelCase mappers ─────────────────────────
 const mapProperty = (r: any): Property => ({
   id: r.id, ownerId: r.owner_id, name: r.name, address: r.address,
-  city: r.city, province: r.province, rentAmount: r.rent_amount,
+  suburb: r.suburb ?? undefined,
+  postalCode: r.postal_code ?? undefined,
+  city: r.city, province: r.province,
+  category: r.category ?? undefined,
+  propertyType: r.property_type ?? undefined,
+  bedrooms: r.bedrooms ?? undefined,
+  bathrooms: r.bathrooms ?? undefined,
+  bathroomType: r.bathroom_type ?? undefined,
+  floor: r.floor ?? undefined,
+  block: r.block ?? undefined,
+  rentAmount: r.rent_amount ?? undefined,
   unitNumber: r.unit_number ?? undefined,
   erfSize: r.erf_size ?? undefined,
   leaseStart: r.lease_start, leaseEnd: r.lease_end, createdAt: r.created_at,
 });
 const mapTenant = (r: any): Tenant => ({
-  id: r.id, ownerId: r.owner_id, userId: r.user_id, name: r.name,
-  email: r.email, phone: r.phone || '', inviteStatus: r.invite_status, createdAt: r.created_at,
+  id: r.id, ownerId: r.owner_id, userId: r.user_id,
+  customerType: r.customer_type ?? 'individual',
+  firstName: r.first_name ?? undefined,
+  lastName: r.last_name ?? undefined,
+  name: r.name,
+  idNumber: r.id_number ?? undefined,
+  countryIssuing: r.country_issuing ?? undefined,
+  email: r.email,
+  secondaryEmail: r.secondary_email ?? undefined,
+  landline: r.landline ?? undefined,
+  phone: r.phone || '',
+  businessAddress: r.business_address ?? undefined,
+  businessAddress2: r.business_address_2 ?? undefined,
+  bankName: r.bank_name ?? undefined,
+  bankAccountNumber: r.bank_account_number ?? undefined,
+  bankBranchCode: r.bank_branch_code ?? undefined,
+  inviteStatus: r.invite_status, createdAt: r.created_at,
 });
 const mapLease = (r: any): Lease => ({
   id: r.id, propertyId: r.property_id, tenantId: r.tenant_id, ownerId: r.owner_id,
-  startDate: r.start_date, endDate: r.end_date, rentAmount: r.rent_amount,
+  leaseType: r.lease_type ?? 'fixed_term',
+  startDate: r.start_date,
+  durationMonths: r.duration_months ?? undefined,
+  endDate: r.end_date,
+  rentFrequency: r.rent_frequency ?? 'monthly',
+  dueDay: r.due_day ?? undefined,
+  rentAmount: r.rent_amount,
   depositPaid: r.deposit_paid, status: r.status, createdAt: r.created_at,
 });
 const mapPropertyCost = (r: any): PropertyCost => ({
@@ -298,7 +329,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addProperty = useCallback(async (data: Omit<Property, 'id' | 'ownerId' | 'createdAt'>): Promise<Property> => {
     const { data: row, error } = await supabase.from('properties').insert({
       owner_id: user!.id, name: data.name, address: data.address,
-      city: data.city, province: data.province, rent_amount: data.rentAmount,
+      suburb: data.suburb || null,
+      postal_code: data.postalCode || null,
+      city: data.city, province: data.province,
+      category: data.category || null,
+      property_type: data.propertyType || null,
+      bedrooms: data.bedrooms ?? null,
+      bathrooms: data.bathrooms ?? null,
+      bathroom_type: data.bathroomType || null,
+      floor: data.floor || null,
+      block: data.block || null,
+      rent_amount: data.rentAmount ?? 0,
       unit_number: data.unitNumber || null,
       erf_size: data.erfSize || null,
     }).select().single();
@@ -312,9 +353,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const update: any = {};
     if (data.name !== undefined) update.name = data.name;
     if (data.address !== undefined) update.address = data.address;
+    if (data.suburb !== undefined) update.suburb = data.suburb || null;
+    if (data.postalCode !== undefined) update.postal_code = data.postalCode || null;
     if (data.city !== undefined) update.city = data.city;
     if (data.province !== undefined) update.province = data.province;
-    if (data.rentAmount !== undefined) update.rent_amount = data.rentAmount;
+    if (data.category !== undefined) update.category = data.category || null;
+    if (data.propertyType !== undefined) update.property_type = data.propertyType || null;
+    if (data.bedrooms !== undefined) update.bedrooms = data.bedrooms ?? null;
+    if (data.bathrooms !== undefined) update.bathrooms = data.bathrooms ?? null;
+    if (data.bathroomType !== undefined) update.bathroom_type = data.bathroomType || null;
+    if (data.floor !== undefined) update.floor = data.floor || null;
+    if (data.block !== undefined) update.block = data.block || null;
+    if (data.rentAmount !== undefined) update.rent_amount = data.rentAmount ?? 0;
     if (data.unitNumber !== undefined) update.unit_number = data.unitNumber || null;
     if (data.erfSize !== undefined) update.erf_size = data.erfSize || null;
     const { error } = await supabase.from('properties').update(update).eq('id', id);
@@ -336,7 +386,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // ── Tenants ───────────────────────────────────────────────
   const addTenant = useCallback(async (data: Omit<Tenant, 'id' | 'ownerId' | 'createdAt' | 'inviteStatus'>): Promise<Tenant> => {
     const { data: row, error } = await supabase.from('tenants').insert({
-      owner_id: user!.id, name: data.name, email: data.email, phone: data.phone,
+      owner_id: user!.id,
+      customer_type: data.customerType || 'individual',
+      first_name: data.firstName || null,
+      last_name: data.lastName || null,
+      name: data.name,
+      id_number: data.idNumber || null,
+      country_issuing: data.countryIssuing || null,
+      email: data.email,
+      secondary_email: data.secondaryEmail || null,
+      landline: data.landline || null,
+      phone: data.phone,
+      business_address: data.businessAddress || null,
+      business_address_2: data.businessAddress2 || null,
+      bank_name: data.bankName || null,
+      bank_account_number: data.bankAccountNumber || null,
+      bank_branch_code: data.bankBranchCode || null,
     }).select().single();
     if (error) throw error;
     const t = mapTenant(row);
@@ -346,9 +411,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const updateTenant = useCallback(async (id: string, data: Partial<Tenant>) => {
     const update: any = {};
+    if (data.customerType !== undefined) update.customer_type = data.customerType || 'individual';
+    if (data.firstName !== undefined) update.first_name = data.firstName || null;
+    if (data.lastName !== undefined) update.last_name = data.lastName || null;
     if (data.name !== undefined) update.name = data.name;
+    if (data.idNumber !== undefined) update.id_number = data.idNumber || null;
+    if (data.countryIssuing !== undefined) update.country_issuing = data.countryIssuing || null;
     if (data.email !== undefined) update.email = data.email;
+    if (data.secondaryEmail !== undefined) update.secondary_email = data.secondaryEmail || null;
+    if (data.landline !== undefined) update.landline = data.landline || null;
     if (data.phone !== undefined) update.phone = data.phone;
+    if (data.businessAddress !== undefined) update.business_address = data.businessAddress || null;
+    if (data.businessAddress2 !== undefined) update.business_address_2 = data.businessAddress2 || null;
+    if (data.bankName !== undefined) update.bank_name = data.bankName || null;
+    if (data.bankAccountNumber !== undefined) update.bank_account_number = data.bankAccountNumber || null;
+    if (data.bankBranchCode !== undefined) update.bank_branch_code = data.bankBranchCode || null;
     if (data.inviteStatus !== undefined) update.invite_status = data.inviteStatus;
     const { error } = await supabase.from('tenants').update(update).eq('id', id);
     if (error) throw error;
@@ -388,7 +465,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addLease = useCallback(async (data: Omit<Lease, 'id' | 'ownerId' | 'createdAt'>): Promise<Lease> => {
     const { data: row, error } = await supabase.from('leases').insert({
       property_id: data.propertyId, tenant_id: data.tenantId, owner_id: user!.id,
-      start_date: data.startDate, end_date: data.endDate || null,
+      lease_type: data.leaseType || 'fixed_term',
+      start_date: data.startDate,
+      duration_months: data.durationMonths ?? null,
+      end_date: data.endDate || null,
+      rent_frequency: data.rentFrequency || 'monthly',
+      due_day: data.dueDay ?? null,
       rent_amount: data.rentAmount, deposit_paid: data.depositPaid, status: data.status,
     }).select().single();
     if (error) throw error;
@@ -400,7 +482,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateLease = useCallback(async (id: string, data: Partial<Lease>) => {
     const update: any = {};
     if (data.status !== undefined) update.status = data.status;
+    if (data.leaseType !== undefined) update.lease_type = data.leaseType || 'fixed_term';
+    if (data.startDate !== undefined) update.start_date = data.startDate;
+    if (data.durationMonths !== undefined) update.duration_months = data.durationMonths ?? null;
     if (data.endDate !== undefined) update.end_date = data.endDate;
+    if (data.rentFrequency !== undefined) update.rent_frequency = data.rentFrequency || 'monthly';
+    if (data.dueDay !== undefined) update.due_day = data.dueDay ?? null;
     if (data.rentAmount !== undefined) update.rent_amount = data.rentAmount;
     if (data.depositPaid !== undefined) update.deposit_paid = data.depositPaid;
     const { error } = await supabase.from('leases').update(update).eq('id', id);

@@ -2,33 +2,79 @@ import React, { useState } from 'react';
 import { Plus, UserPlus } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Modal, ConfirmDialog, EmptyState, StatusBadge, Field, Select } from '../../components/UI';
-import { Tenant, Lease } from '../../types';
-import { formatCurrency, formatDate, generateId, today } from '../../utils';
+import { CustomerType, LeaseType, RentFrequency } from '../../types';
+import {
+  formatCurrency, formatDate, today,
+  CUSTOMER_TYPES, LEASE_TYPES, RENT_FREQUENCIES, DUE_DAYS,
+  computeLeaseEndDate, labelFor,
+} from '../../utils';
 
 interface Props { propertyId: string; }
+
+const EMPTY_TENANT_FORM = {
+  customerType: 'individual' as CustomerType,
+  firstName: '', lastName: '', idNumber: '', countryIssuing: '',
+  email: '', secondaryEmail: '', landline: '', phone: '',
+  businessAddress: '', businessAddress2: '',
+  bankName: '', bankAccountNumber: '', bankBranchCode: '',
+};
+
+const EMPTY_LEASE_FORM = {
+  leaseType: 'fixed_term' as LeaseType,
+  startDate: today(), durationMonths: '',
+  rentFrequency: 'monthly' as RentFrequency, dueDay: '1',
+  rentAmount: '', depositPaid: '',
+};
 
 function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onClose: () => void; propertyId: string }) {
   const { addTenant, addLease, tenants, leases, showToast, user } = useApp();
   const [step, setStep] = useState<'tenant' | 'lease'>('tenant');
   const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [selectedTenantId, setSelectedTenantId] = useState('');
-  const [tenantForm, setTenantForm] = useState({ name: '', email: '', phone: '' });
-  const [leaseForm, setLeaseForm] = useState({ startDate: today(), endDate: '', rentAmount: '', depositPaid: '' });
+  const [tenantForm, setTenantForm] = useState(EMPTY_TENANT_FORM);
+  const [showSecondAddress, setShowSecondAddress] = useState(false);
+  const [leaseForm, setLeaseForm] = useState(EMPTY_LEASE_FORM);
   const [createdTenantId, setCreatedTenantId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const setT = (k: keyof typeof tenantForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setTenantForm(f => ({ ...f, [k]: e.target.value }));
+  const setL = (k: keyof typeof leaseForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setLeaseForm(f => ({ ...f, [k]: e.target.value }));
+
+  const isBusiness = tenantForm.customerType === 'business';
+  const isFixedTerm = leaseForm.leaseType === 'fixed_term';
+  // End date is auto-calculated from start + duration for fixed-term leases.
+  const computedEndDate = isFixedTerm
+    ? computeLeaseEndDate(leaseForm.startDate, Number(leaseForm.durationMonths))
+    : '';
+
   const availableTenants = tenants.filter(t => t.ownerId === user?.id);
-  // Tenants without an active lease on this property
   const existingLeases = leases.filter(l => l.status === 'active');
   const tenantsWithoutLease = availableTenants.filter(t =>
     !existingLeases.find(l => l.tenantId === t.id && l.propertyId === propertyId)
   );
 
+  const resetForms = () => {
+    setStep('tenant');
+    setMode('new');
+    setSelectedTenantId('');
+    setTenantForm(EMPTY_TENANT_FORM);
+    setShowSecondAddress(false);
+    setLeaseForm(EMPTY_LEASE_FORM);
+    setCreatedTenantId('');
+    setErrors({});
+  };
+
+  const handleClose = () => { onClose(); resetForms(); };
+
   const validateTenant = () => {
     const e: Record<string, string> = {};
     if (mode === 'new') {
-      if (!tenantForm.name.trim()) e.name = 'Name required';
+      if (!tenantForm.firstName.trim()) e.firstName = isBusiness ? 'Contact first name required' : 'First name required';
+      if (!tenantForm.lastName.trim()) e.lastName = isBusiness ? 'Contact last name required' : 'Last name required';
       if (!tenantForm.email.trim()) e.email = 'Email required';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenantForm.email)) e.email = 'Enter a valid email';
     } else {
       if (!selectedTenantId) e.tenant = 'Select a tenant';
     }
@@ -39,6 +85,7 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
   const validateLease = () => {
     const e: Record<string, string> = {};
     if (!leaseForm.startDate) e.startDate = 'Start date required';
+    if (isFixedTerm && (!leaseForm.durationMonths || Number(leaseForm.durationMonths) <= 0)) e.durationMonths = 'Duration required';
     if (!leaseForm.rentAmount || Number(leaseForm.rentAmount) <= 0) e.rentAmount = 'Valid rent amount required';
     if (!leaseForm.depositPaid || Number(leaseForm.depositPaid) < 0) e.depositPaid = 'Deposit amount required';
     setErrors(e);
@@ -48,11 +95,29 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
   const handleNext = async () => {
     if (!validateTenant()) return;
     if (mode === 'new') {
-      const t = await addTenant(tenantForm);
+      const displayName = `${tenantForm.firstName} ${tenantForm.lastName}`.trim() || tenantForm.email;
+      const t = await addTenant({
+        customerType: tenantForm.customerType,
+        firstName: tenantForm.firstName.trim() || undefined,
+        lastName: tenantForm.lastName.trim() || undefined,
+        name: displayName,
+        idNumber: tenantForm.idNumber.trim() || undefined,
+        countryIssuing: tenantForm.countryIssuing.trim() || undefined,
+        email: tenantForm.email.trim(),
+        secondaryEmail: tenantForm.secondaryEmail.trim() || undefined,
+        landline: tenantForm.landline.trim() || undefined,
+        phone: tenantForm.phone.trim(),
+        businessAddress: tenantForm.businessAddress.trim() || undefined,
+        businessAddress2: tenantForm.businessAddress2.trim() || undefined,
+        bankName: tenantForm.bankName.trim() || undefined,
+        bankAccountNumber: tenantForm.bankAccountNumber.trim() || undefined,
+        bankBranchCode: tenantForm.bankBranchCode.trim() || undefined,
+      });
       setCreatedTenantId(t.id);
     } else {
       setCreatedTenantId(selectedTenantId);
     }
+    setErrors({});
     setStep('lease');
   };
 
@@ -61,21 +126,22 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
     await addLease({
       propertyId,
       tenantId: createdTenantId,
+      leaseType: leaseForm.leaseType,
       startDate: leaseForm.startDate,
-      endDate: leaseForm.endDate || undefined,
+      durationMonths: isFixedTerm && leaseForm.durationMonths ? Number(leaseForm.durationMonths) : undefined,
+      endDate: computedEndDate || undefined,
+      rentFrequency: leaseForm.rentFrequency,
+      dueDay: leaseForm.dueDay ? Number(leaseForm.dueDay) : undefined,
       rentAmount: Number(leaseForm.rentAmount),
       depositPaid: Number(leaseForm.depositPaid),
       status: 'active',
     });
     showToast('Tenant and lease created');
-    onClose();
-    setStep('tenant');
-    setTenantForm({ name: '', email: '', phone: '' });
-    setLeaseForm({ startDate: today(), endDate: '', rentAmount: '', depositPaid: '' });
+    handleClose();
   };
 
   return (
-    <Modal open={open} onClose={onClose} title={step === 'tenant' ? 'Add tenant' : 'Lease details'}>
+    <Modal open={open} onClose={handleClose} title={step === 'tenant' ? 'Add tenant' : 'Lease details'}>
       <div className="p-6 space-y-4">
         {step === 'tenant' && (
           <>
@@ -88,15 +154,68 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
             </div>
             {mode === 'new' ? (
               <>
-                <Field label="Full name" required error={errors.name}>
-                  <input className="input" value={tenantForm.name} onChange={e => setTenantForm(f => ({ ...f, name: e.target.value }))} placeholder="Sarah Nkosi" />
+                <Field label="Customer type" required>
+                  <Select value={tenantForm.customerType} onChange={setT('customerType')} options={CUSTOMER_TYPES} />
                 </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label={isBusiness ? 'Contact first name' : 'First names'} required error={errors.firstName}>
+                    <input className="input" value={tenantForm.firstName} onChange={setT('firstName')} placeholder="Sarah" />
+                  </Field>
+                  <Field label={isBusiness ? 'Contact last name' : 'Last names'} required error={errors.lastName}>
+                    <input className="input" value={tenantForm.lastName} onChange={setT('lastName')} placeholder="Nkosi" />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="ID / Passport number">
+                    <input className="input" value={tenantForm.idNumber} onChange={setT('idNumber')} placeholder="8001015009087" />
+                  </Field>
+                  <Field label="Country issuing">
+                    <input className="input" value={tenantForm.countryIssuing} onChange={setT('countryIssuing')} placeholder="South Africa" />
+                  </Field>
+                </div>
                 <Field label="Email address" required error={errors.email}>
-                  <input className="input" type="email" value={tenantForm.email} onChange={e => setTenantForm(f => ({ ...f, email: e.target.value }))} placeholder="tenant@email.com" />
+                  <input className="input" type="email" value={tenantForm.email} onChange={setT('email')} placeholder="tenant@email.com" />
                 </Field>
-                <Field label="Phone number">
-                  <input className="input" value={tenantForm.phone} onChange={e => setTenantForm(f => ({ ...f, phone: e.target.value }))} placeholder="071 234 5678" />
+                <Field label="Secondary email address">
+                  <input className="input" type="email" value={tenantForm.secondaryEmail} onChange={setT('secondaryEmail')} placeholder="alt@email.com" />
                 </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Landline number">
+                    <input className="input" value={tenantForm.landline} onChange={setT('landline')} placeholder="011 234 5678" />
+                  </Field>
+                  <Field label="Cell number">
+                    <input className="input" value={tenantForm.phone} onChange={setT('phone')} placeholder="071 234 5678" />
+                  </Field>
+                </div>
+
+                <Field label={isBusiness ? 'Business address' : 'Address'}>
+                  <textarea className="input min-h-[64px] resize-y" value={tenantForm.businessAddress} onChange={e => setTenantForm(f => ({ ...f, businessAddress: e.target.value }))} placeholder="Street, suburb, city, postal code" />
+                </Field>
+                {showSecondAddress ? (
+                  <Field label="Additional address">
+                    <textarea className="input min-h-[64px] resize-y" value={tenantForm.businessAddress2} onChange={e => setTenantForm(f => ({ ...f, businessAddress2: e.target.value }))} placeholder="Second address" />
+                  </Field>
+                ) : (
+                  <button type="button" onClick={() => setShowSecondAddress(true)} className="text-xs font-medium text-brand-600 hover:underline">
+                    + Add another address
+                  </button>
+                )}
+
+                {/* Bank account — structured */}
+                <div className="rounded-xl border border-surface-200 p-3 space-y-3">
+                  <p className="text-xs font-semibold text-ink-600">Bank account</p>
+                  <Field label="Bank name">
+                    <input className="input" value={tenantForm.bankName} onChange={setT('bankName')} placeholder="FNB" />
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Account number">
+                      <input className="input" inputMode="numeric" value={tenantForm.bankAccountNumber} onChange={setT('bankAccountNumber')} placeholder="62012345678" />
+                    </Field>
+                    <Field label="Branch code">
+                      <input className="input" inputMode="numeric" value={tenantForm.bankBranchCode} onChange={setT('bankBranchCode')} placeholder="250655" />
+                    </Field>
+                  </div>
+                </div>
               </>
             ) : (
               <Field label="Select tenant" required error={errors.tenant}>
@@ -109,31 +228,57 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
               </Field>
             )}
             <div className="flex gap-3 pt-2">
-              <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
+              <button onClick={handleClose} className="btn-secondary flex-1 justify-center">Cancel</button>
               <button onClick={handleNext} className="btn-primary flex-1 justify-center">Next: Lease details →</button>
             </div>
           </>
         )}
         {step === 'lease' && (
           <>
+            <Field label="Lease type" required>
+              <Select value={leaseForm.leaseType} onChange={setL('leaseType')} options={LEASE_TYPES} />
+            </Field>
+
             <div className="grid grid-cols-2 gap-3">
               <Field label="Lease start date" required error={errors.startDate}>
-                <input className="input" type="date" value={leaseForm.startDate} onChange={e => setLeaseForm(f => ({ ...f, startDate: e.target.value }))} />
+                <input className="input" type="date" value={leaseForm.startDate} onChange={setL('startDate')} />
               </Field>
-              <Field label="Lease end date">
-                <input className="input" type="date" value={leaseForm.endDate} onChange={e => setLeaseForm(f => ({ ...f, endDate: e.target.value }))} />
+              {isFixedTerm ? (
+                <Field label="Duration (months)" required error={errors.durationMonths}>
+                  <input className="input" type="number" inputMode="numeric" min="1" value={leaseForm.durationMonths} onChange={setL('durationMonths')} placeholder="12" />
+                </Field>
+              ) : (
+                <Field label="Duration">
+                  <input className="input bg-surface-50" value="Ongoing (month-to-month)" disabled readOnly />
+                </Field>
+              )}
+            </div>
+
+            {isFixedTerm && (
+              <Field label="Lease end date" hint="Auto-calculated from start date + duration">
+                <input className="input bg-surface-50" value={computedEndDate ? formatDate(computedEndDate) : '—'} disabled readOnly />
+              </Field>
+            )}
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Rent due" required>
+                <Select value={leaseForm.rentFrequency} onChange={setL('rentFrequency')} options={RENT_FREQUENCIES} />
+              </Field>
+              <Field label="Due date" required hint="Day of the period">
+                <Select value={leaseForm.dueDay} onChange={setL('dueDay')} options={DUE_DAYS} />
               </Field>
             </div>
-            <Field label="Monthly rent (ZAR)" required error={errors.rentAmount}>
+
+            <Field label="Rental amount (ZAR)" required error={errors.rentAmount}>
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R</span>
-                <input className="input pl-7" type="number" inputMode="decimal" value={leaseForm.rentAmount} onChange={e => setLeaseForm(f => ({ ...f, rentAmount: e.target.value }))} placeholder="12 500" />
+                <input className="input pl-7" type="number" inputMode="decimal" value={leaseForm.rentAmount} onChange={setL('rentAmount')} placeholder="12 500" />
               </div>
             </Field>
-            <Field label="Deposit paid (ZAR)" required error={errors.depositPaid} hint="Typically 1–2 months' rent">
+            <Field label="Deposit (ZAR)" required error={errors.depositPaid} hint="Typically 1–2 months' rent">
               <div className="relative">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R</span>
-                <input className="input pl-7" type="number" inputMode="decimal" value={leaseForm.depositPaid} onChange={e => setLeaseForm(f => ({ ...f, depositPaid: e.target.value }))} placeholder="25 000" />
+                <input className="input pl-7" type="number" inputMode="decimal" value={leaseForm.depositPaid} onChange={setL('depositPaid')} placeholder="25 000" />
               </div>
             </Field>
             <div className="flex gap-3 pt-2">
@@ -191,9 +336,11 @@ export function LeasesTab({ propertyId }: Props) {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3 sm:gap-4 mt-4 pt-4 border-t border-surface-100 text-sm">
+                <div><p className="text-xs text-gray-500">Lease type</p><p className="font-medium">{labelFor(LEASE_TYPES, activeLease.leaseType)}</p></div>
                 <div><p className="text-xs text-gray-500">Start date</p><p className="font-medium">{formatDate(activeLease.startDate)}</p></div>
                 <div><p className="text-xs text-gray-500">End date</p><p className="font-medium">{activeLease.endDate ? formatDate(activeLease.endDate) : 'Open-ended'}</p></div>
-                <div><p className="text-xs text-gray-500">Monthly rent</p><p className="font-medium">{formatCurrency(activeLease.rentAmount)}</p></div>
+                <div><p className="text-xs text-gray-500">Rent due</p><p className="font-medium">{labelFor(RENT_FREQUENCIES, activeLease.rentFrequency)}{activeLease.dueDay ? ` · day ${activeLease.dueDay}` : ''}</p></div>
+                <div><p className="text-xs text-gray-500">Rental amount</p><p className="font-medium">{formatCurrency(activeLease.rentAmount)}</p></div>
                 <div><p className="text-xs text-gray-500">Deposit paid</p><p className="font-medium">{formatCurrency(activeLease.depositPaid)}</p></div>
               </div>
             </div>
