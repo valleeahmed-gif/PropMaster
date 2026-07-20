@@ -8,6 +8,16 @@ export interface User {
   createdAt: string;
 }
 
+/** Landlord business identity — printed on invoices and reports. */
+export interface CompanyProfile {
+  companyName?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyAddress?: string;
+  vatNumber?: string;
+  registrationNumber?: string;
+}
+
 export type Province =
   | 'Gauteng'
   | 'Western Cape'

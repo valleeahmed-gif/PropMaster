@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { Tenant, Lease, Property, Invoice, Payment, MaintenanceRequest, Toast, User } from '../types';
+import { Tenant, Lease, Property, Invoice, Payment, MaintenanceRequest, Toast, User, CompanyProfile } from '../types';
 import { generateId } from '../utils';
 
 // ── Shape ──────────────────────────────────────────────────
@@ -14,6 +14,8 @@ interface TenantState {
   tenantRecord: Tenant | null;
   activeLease: Lease | null;
   property: Property | null;
+  /** The landlord's company identity — for branding the tenant's invoice PDFs. */
+  landlordCompany: CompanyProfile | null;
   invoices: Invoice[];
   payments: Payment[];
   maintenanceRequests: MaintenanceRequest[];
@@ -99,6 +101,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   const [tenantRecord, setTenantRecord] = useState<Tenant | null>(null);
   const [activeLease, setActiveLease] = useState<Lease | null>(null);
   const [property, setProperty] = useState<Property | null>(null);
+  const [landlordCompany, setLandlordCompany] = useState<CompanyProfile | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [maintenanceRequests, setMaintenanceRequests] = useState<MaintenanceRequest[]>([]);
@@ -173,6 +176,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         // Tenant linked but no active lease — partial state, show empty
         setActiveLease(null);
         setProperty(null);
+        setLandlordCompany(null);
         setInvoices([]);
         setPayments([]);
         setMaintenanceRequests([]);
@@ -182,22 +186,32 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       const lease = mapLease(leaseData);
       setActiveLease(lease);
 
-      // 3. Load property + invoices + payments + maintenance in parallel
+      // 3. Load property + invoices + payments + maintenance + landlord company
       const [
         { data: propData, error: pErr },
         { data: invData },
         { data: payData },
         { data: maintData },
+        { data: companyData },
       ] = await Promise.all([
         supabase.from('properties').select('*').eq('id', lease.propertyId).maybeSingle(),
         supabase.from('invoices').select('*').eq('lease_id', lease.id).order('due_date', { ascending: false }),
         supabase.from('payments').select('*').eq('lease_id', lease.id).eq('status', 'verified').order('payment_date', { ascending: false }),
         supabase.from('maintenance_requests').select('*').eq('tenant_id', tenant.id).order('created_at', { ascending: false }),
+        supabase.from('landlord_profiles').select('*').eq('user_id', lease.ownerId).maybeSingle(),
       ]);
 
       if (pErr) throw pErr;
 
       if (propData) setProperty(mapProperty(propData));
+      setLandlordCompany(companyData ? {
+        companyName: companyData.company_name ?? undefined,
+        companyEmail: companyData.company_email ?? undefined,
+        companyPhone: companyData.company_phone ?? undefined,
+        companyAddress: companyData.company_address ?? undefined,
+        vatNumber: companyData.vat_number ?? undefined,
+        registrationNumber: companyData.registration_number ?? undefined,
+      } : null);
       setInvoices((invData || []).map(mapInvoice));
       setPayments((payData || []).map(mapPayment));
       setMaintenanceRequests((maintData || []).map(mapMaintenance));
@@ -239,6 +253,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         setTenantRecord(null);
         setActiveLease(null);
         setProperty(null);
+        setLandlordCompany(null);
         setInvoices([]);
         setPayments([]);
         setMaintenanceRequests([]);
@@ -304,7 +319,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const value: TenantContextType = {
     user, session, authLoading, dataLoading, initialized, loadError,
-    tenantRecord, activeLease, property, invoices, payments, maintenanceRequests, toasts,
+    tenantRecord, activeLease, property, landlordCompany, invoices, payments, maintenanceRequests, toasts,
     logout, submitMaintenanceRequest, showToast, dismissToast, refreshData,
   };
 

@@ -16,6 +16,7 @@ const DashboardPage      = lazy(() => import('./pages/Dashboard').then(m => ({ d
 const PropertiesPage     = lazy(() => import('./pages/Properties').then(m => ({ default: m.PropertiesPage })));
 const PropertyDetailPage = lazy(() => import('./pages/Properties').then(m => ({ default: m.PropertyDetailPage })));
 const ReportsPage        = lazy(() => import('./pages/Reports').then(m => ({ default: m.ReportsPage })));
+const SettingsPage       = lazy(() => import('./pages/Settings').then(m => ({ default: m.SettingsPage })));
 
 // ── Lazy global pages — multi-export module needs a wrapper ─
 function GlobalPagesWrapper({ kind }: { kind: 'tenants' | 'invoices' | 'payments' | 'maintenance' }) {
@@ -107,6 +108,7 @@ function AppRoutes() {
       <Route path="/payments"    element={<LandlordRoute><GlobalPagesWrapper kind="payments" /></LandlordRoute>} />
       <Route path="/maintenance" element={<LandlordRoute><GlobalPagesWrapper kind="maintenance" /></LandlordRoute>} />
       <Route path="/reports"     element={<LandlordRoute><Suspense fallback={<PageSkeleton />}><ReportsPage /></Suspense></LandlordRoute>} />
+      <Route path="/settings"    element={<LandlordRoute><Suspense fallback={<PageSkeleton />}><SettingsPage /></Suspense></LandlordRoute>} />
 
       {/* Accept invite */}
       <Route path="/accept-invite" element={

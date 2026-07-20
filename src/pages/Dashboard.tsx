@@ -10,7 +10,7 @@ import { formatCurrency, formatDate } from '../utils';
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { properties, leases, invoices, payments, maintenanceRequests, tenants, user } = useApp();
+  const { properties, leases, invoices, payments, maintenanceRequests, tenants, companyProfile, user } = useApp();
 
   // Scope to logged-in landlord
   const myProperties = properties.filter(p => p.ownerId === user?.id);
@@ -62,6 +62,25 @@ export function DashboardPage() {
           Here's how your portfolio is performing today.
         </p>
       </section>
+
+      {/* Set-up-your-company nudge — only until a company name is saved */}
+      {!companyProfile?.companyName && (
+        <section className="mb-6">
+          <button
+            onClick={() => navigate('/settings')}
+            className="card card-lift p-4 w-full text-left flex items-center gap-3 border-brass-200 bg-brass-50/50"
+          >
+            <div className="w-10 h-10 rounded-xl bg-brass-100 flex items-center justify-center flex-shrink-0">
+              <Building2 size={18} className="text-brass-700" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-ink-900">Add your company name</p>
+              <p className="text-xs text-ink-500 mt-0.5">Brand your invoices and reports with your business details.</p>
+            </div>
+            <ArrowUpRight size={16} className="text-brass-700 flex-shrink-0" />
+          </button>
+        </section>
+      )}
 
       {/* Headline stats — 2x2 mobile, 4 desktop */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 stagger" aria-label="Portfolio summary">

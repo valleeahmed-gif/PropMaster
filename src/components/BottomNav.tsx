@@ -10,7 +10,7 @@ const BOTTOM_NAV = [
   { path: '/more',       label: 'More',       icon: MoreHorizontal },
 ];
 
-const MORE_PATHS = ['/tenants', '/maintenance', '/reports', '/more'];
+const MORE_PATHS = ['/tenants', '/maintenance', '/reports', '/settings', '/more'];
 
 export function BottomNav() {
   const navigate = useNavigate();

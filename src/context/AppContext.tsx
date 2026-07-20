@@ -3,7 +3,7 @@ import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import {
   User, Property, Tenant, Lease, PropertyCost, UtilityBreakdown,
-  Invoice, Payment, MaintenanceRequest, StatementUpload, Toast
+  Invoice, Payment, MaintenanceRequest, StatementUpload, Toast, CompanyProfile
 } from '../types';
 import { generateId, today, APP_URL } from '../utils';
 
@@ -11,6 +11,7 @@ interface AppState {
   user: User | null;
   session: Session | null;
   authLoading: boolean;
+  companyProfile: CompanyProfile | null;
   properties: Property[];
   tenants: Tenant[];
   leases: Lease[];
@@ -29,6 +30,7 @@ interface AppActions {
   login: (email: string, password: string) => Promise<{ error: string | null }>;
   logout: () => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<{ error: string | null }>;
+  updateCompanyProfile: (data: CompanyProfile) => Promise<void>;
   addProperty: (data: Omit<Property, 'id' | 'ownerId' | 'createdAt'>) => Promise<Property>;
   updateProperty: (id: string, data: Partial<Property>) => Promise<void>;
   deleteProperty: (id: string) => Promise<void>;
@@ -134,6 +136,14 @@ const mapMaintenance = (r: any): MaintenanceRequest => ({
   resolutionNote: r.resolution_note ?? undefined,
   createdAt: r.created_at, updatedAt: r.updated_at,
 });
+const mapCompanyProfile = (r: any): CompanyProfile => ({
+  companyName: r.company_name ?? undefined,
+  companyEmail: r.company_email ?? undefined,
+  companyPhone: r.company_phone ?? undefined,
+  companyAddress: r.company_address ?? undefined,
+  vatNumber: r.vat_number ?? undefined,
+  registrationNumber: r.registration_number ?? undefined,
+});
 const mapStatementUpload = (r: any): StatementUpload => ({
   id: r.id, propertyId: r.property_id, ownerId: r.owner_id, filePath: r.file_path,
   fileName: r.file_name, extractedData: r.extracted_data, extractionStatus: r.extraction_status,
@@ -144,6 +154,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [dataLoading, setDataLoading] = useState(false);
   const [properties, setProperties] = useState<Property[]>([]);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -175,7 +186,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       const [
         { data: props }, { data: tens }, { data: leas }, { data: costs },
-        { data: bds }, { data: invs }, { data: pays }, { data: maint }, { data: stmts }
+        { data: bds }, { data: invs }, { data: pays }, { data: maint }, { data: stmts },
+        { data: profile }
       ] = await Promise.all([
         supabase.from('properties').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
         supabase.from('tenants').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
@@ -186,7 +198,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         supabase.from('payments').select('*').eq('owner_id', sbUser.id).order('payment_date', { ascending: false }),
         supabase.from('maintenance_requests').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
         supabase.from('statement_uploads').select('*').eq('owner_id', sbUser.id).order('uploaded_at', { ascending: false }),
+        supabase.from('landlord_profiles').select('*').eq('user_id', sbUser.id).maybeSingle(),
       ]);
+      setCompanyProfile(profile ? mapCompanyProfile(profile) : null);
       if (props) setProperties(props.map(mapProperty));
       if (tens) setTenants(tens.map(mapTenant));
       if (leas) setLeases(leas.map(mapLease));
@@ -281,6 +295,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!s?.user) {
         loadedUserId = null;
         setUser(null);
+        setCompanyProfile(null);
         setProperties([]); setTenants([]); setLeases([]);
         setPropertyCosts([]); setUtilityBreakdowns([]); setInvoices([]);
         setPayments([]); setMaintenanceRequests([]); setStatementUploads([]);
@@ -329,6 +344,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     return { error: error?.message || null };
   }, []);
+
+  // ── Company profile (branding for invoices & reports) ─────
+  const updateCompanyProfile = useCallback(async (data: CompanyProfile) => {
+    const { error } = await supabase.from('landlord_profiles').upsert({
+      user_id: user!.id,
+      company_name: data.companyName?.trim() || null,
+      company_email: data.companyEmail?.trim() || null,
+      company_phone: data.companyPhone?.trim() || null,
+      company_address: data.companyAddress?.trim() || null,
+      vat_number: data.vatNumber?.trim() || null,
+      registration_number: data.registrationNumber?.trim() || null,
+    }, { onConflict: 'user_id' });
+    if (error) throw error;
+    setCompanyProfile(data);
+  }, [user]);
 
   // ── Properties ────────────────────────────────────────────
   const addProperty = useCallback(async (data: Omit<Property, 'id' | 'ownerId' | 'createdAt'>): Promise<Property> => {
@@ -729,11 +759,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value: AppContextType = {
-    user, session, authLoading, dataLoading,
+    user, session, authLoading, dataLoading, companyProfile,
     properties, tenants, leases, propertyCosts, utilityBreakdowns,
     invoices, payments, maintenanceRequests, statementUploads,
     toasts, sidebarOpen,
-    login, logout, signup,
+    login, logout, signup, updateCompanyProfile,
     addProperty, updateProperty, deleteProperty,
     addTenant, updateTenant, inviteTenant,
     addLease, updateLease, endLease,

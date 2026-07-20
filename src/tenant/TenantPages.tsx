@@ -387,7 +387,7 @@ function InvoiceRow({ inv, payments, onDownload }: { inv: Invoice; payments: any
 }
 
 export function TenantInvoicesPage() {
-  const { invoices, payments, tenantRecord, property, activeLease, dataLoading, initialized, loadError, refreshData } = useTenant();
+  const { invoices, payments, tenantRecord, property, activeLease, landlordCompany, dataLoading, initialized, loadError, refreshData } = useTenant();
   const [filter, setFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
 
   if (dataLoading && !initialized) return <ListLoading />;
@@ -408,7 +408,7 @@ export function TenantInvoicesPage() {
   const handleDownloadPdf = async (inv: Invoice) => {
     const invPayments = payments.filter(p => p.invoiceId === inv.id);
     const { downloadInvoicePdf } = await import('../utils/pdf');
-    downloadInvoicePdf({ invoice: inv, property, tenant: tenantRecord, lease: activeLease, payments: invPayments });
+    downloadInvoicePdf({ invoice: inv, property, tenant: tenantRecord, lease: activeLease, payments: invPayments, company: landlordCompany });
   };
 
   return (

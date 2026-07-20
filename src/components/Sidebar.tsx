@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Building2, Users, FileText, CreditCard,
-  Wrench, LogOut, X, ChevronRight, BarChart2
+  Wrench, LogOut, X, ChevronRight, BarChart2, Settings
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { LogoIcon } from './Logo';
@@ -15,6 +15,7 @@ const NAV_ITEMS = [
   { path: '/payments',    label: 'Payments',    icon: CreditCard },
   { path: '/maintenance', label: 'Maintenance', icon: Wrench },
   { path: '/reports',     label: 'Reports',     icon: BarChart2 },
+  { path: '/settings',    label: 'Settings',    icon: Settings },
 ];
 
 interface SidebarProps { mobile?: boolean; }

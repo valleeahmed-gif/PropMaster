@@ -3,7 +3,7 @@
 // main bundle. Callers: InvoicesTab, GlobalPages, Reports, TenantPages.
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Invoice, Payment, Property, Tenant, Lease } from '../types';
+import { Invoice, Payment, Property, Tenant, Lease, CompanyProfile } from '../types';
 import { formatDate, formatMonthYear } from './index';
 
 // ── SA flag palette (exact official colours) ────────────────
@@ -25,8 +25,15 @@ const money = (n: number): string => {
 const PAGE_W = 210; // A4 portrait, mm
 const MARGIN = 16;
 
-function header(doc: jsPDF, docTitle: string, subtitle: string) {
-  // Green masthead with gold keyline — SA flag colours
+function header(doc: jsPDF, docTitle: string, subtitle: string, company?: CompanyProfile | null) {
+  // Green masthead with gold keyline — SA flag colours. The landlord's
+  // company name (when set) brands the document; otherwise it falls back
+  // to the PropMaster wordmark.
+  const brand = company?.companyName?.trim() || 'PropMaster';
+  const tagline = company?.companyName?.trim()
+    ? 'Property management · South Africa'
+    : 'Property management for South African landlords';
+
   doc.setFillColor(...GREEN);
   doc.rect(0, 0, PAGE_W, 26, 'F');
   doc.setFillColor(...GOLD);
@@ -34,11 +41,11 @@ function header(doc: jsPDF, docTitle: string, subtitle: string) {
 
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('PropMaster', MARGIN, 12);
+  doc.setFontSize(brand.length > 30 ? 13 : 16);
+  doc.text(brand, MARGIN, 12, { maxWidth: PAGE_W / 2 });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  doc.text('Property management for South African landlords', MARGIN, 18);
+  doc.text(tagline, MARGIN, 18);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
@@ -72,50 +79,76 @@ export interface InvoicePdfInput {
   lease?: Lease | null;
   /** Verified payments linked to this invoice. */
   payments: Payment[];
+  /** Issuing landlord's business identity (masthead + "From" block). */
+  company?: CompanyProfile | null;
 }
 
-export function downloadInvoicePdf({ invoice, property, tenant, lease, payments }: InvoicePdfInput) {
+export function downloadInvoicePdf({ invoice, property, tenant, lease, payments, company }: InvoicePdfInput) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  header(doc, 'INVOICE', invoice.invoiceNumber);
+  // A VAT-registered issuer produces a "TAX INVOICE" (SA convention).
+  const title = company?.vatNumber?.trim() ? 'TAX INVOICE' : 'INVOICE';
+  header(doc, title, invoice.invoiceNumber, company);
 
   let y = 38;
+  const colR = PAGE_W / 2 + 4;
 
-  // Meta block (left) + Bill To (right)
+  // From (issuer) — left · Bill To (tenant) — right
   doc.setTextColor(...MUTED);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
-  doc.text('INVOICE DETAILS', MARGIN, y);
-  doc.text('BILL TO', PAGE_W / 2 + 4, y);
+  doc.text('FROM', MARGIN, y);
+  doc.text('BILL TO', colR, y);
 
-  doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(...INK);
 
-  const metaLines = [
-    `Invoice number:  ${invoice.invoiceNumber}`,
-    `Billing period:  ${formatMonthYear(invoice.month, invoice.year)}`,
-    `Due date:  ${formatDate(invoice.dueDate)}`,
-    `Status:  ${invoice.status.toUpperCase()}`,
-  ];
-  metaLines.forEach((l, i) => doc.text(l, MARGIN, y + 6 + i * 5));
-
-  const billLines: string[] = [];
-  if (tenant) {
-    billLines.push(tenant.name);
-    if (tenant.email) billLines.push(tenant.email);
-    if (tenant.phone) billLines.push(tenant.phone);
-  } else {
-    billLines.push('Tenant');
+  // Issuer block
+  const fromLines: { t: string; bold?: boolean }[] = [];
+  fromLines.push({ t: company?.companyName?.trim() || 'PropMaster', bold: true });
+  if (company?.companyAddress?.trim()) {
+    company.companyAddress.split('\n').forEach(l => fromLines.push({ t: l }));
   }
+  if (company?.companyEmail?.trim()) fromLines.push({ t: company.companyEmail });
+  if (company?.companyPhone?.trim()) fromLines.push({ t: company.companyPhone });
+  if (company?.vatNumber?.trim()) fromLines.push({ t: `VAT No: ${company.vatNumber}` });
+  if (company?.registrationNumber?.trim()) fromLines.push({ t: `Reg No: ${company.registrationNumber}` });
+
+  fromLines.forEach((l, i) => {
+    doc.setFont('helvetica', l.bold ? 'bold' : 'normal');
+    doc.text(l.t, MARGIN, y + 6 + i * 5, { maxWidth: PAGE_W / 2 - MARGIN - 4 });
+  });
+
+  // Bill-to block
+  const billLines: { t: string; bold?: boolean }[] = [];
+  billLines.push({ t: tenant?.name || 'Tenant', bold: true });
+  if (tenant?.email) billLines.push({ t: tenant.email });
+  if (tenant?.phone) billLines.push({ t: tenant.phone });
   if (property) {
-    billLines.push('');
-    billLines.push(property.name + (property.unitNumber ? ` (Unit ${property.unitNumber})` : ''));
-    billLines.push(property.address);
-    billLines.push(`${property.city}, ${property.province}`);
+    billLines.push({ t: '' });
+    billLines.push({ t: property.name + (property.unitNumber ? ` (Unit ${property.unitNumber})` : '') });
+    billLines.push({ t: property.address });
+    billLines.push({ t: `${property.city}, ${property.province}` });
   }
-  billLines.forEach((l, i) => doc.text(l, PAGE_W / 2 + 4, y + 6 + i * 5));
+  billLines.forEach((l, i) => {
+    doc.setFont('helvetica', l.bold ? 'bold' : 'normal');
+    doc.text(l.t, colR, y + 6 + i * 5, { maxWidth: PAGE_W - colR - MARGIN });
+  });
 
-  y += 6 + Math.max(metaLines.length, billLines.length) * 5 + 6;
+  y += 6 + Math.max(fromLines.length, billLines.length) * 5 + 4;
+
+  // Meta strip — period / due / status
+  doc.setDrawColor(...LIGHT);
+  doc.setLineWidth(0.4);
+  doc.line(MARGIN, y, PAGE_W - MARGIN, y);
+  y += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(...MUTED);
+  doc.text(
+    `Billing period: ${formatMonthYear(invoice.month, invoice.year)}     Due: ${formatDate(invoice.dueDate)}     Status: ${invoice.status.toUpperCase()}`,
+    MARGIN, y,
+  );
+  y += 6;
 
   // Line items
   autoTable(doc, {
@@ -201,11 +234,13 @@ interface ReportPdfInput {
   rightCols?: number[];
   /** Optional stat lines rendered above the table. */
   stats?: [string, string][];
+  /** Issuing landlord's business identity for the masthead. */
+  company?: CompanyProfile | null;
 }
 
-function reportPdf({ docTitle, subtitle, fileName, head, body, foot, rightCols = [], stats }: ReportPdfInput) {
+function reportPdf({ docTitle, subtitle, fileName, head, body, foot, rightCols = [], stats, company }: ReportPdfInput) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  header(doc, docTitle, subtitle);
+  header(doc, docTitle, subtitle, company);
 
   let y = 36;
 
@@ -257,8 +292,9 @@ export interface PnlPdfRow {
   paymentCount: number;
 }
 
-export function downloadPnlPdf(period: string, rows: PnlPdfRow[], totals: { collected: number; passthrough: number; nonRecoverable: number; net: number }) {
+export function downloadPnlPdf(period: string, rows: PnlPdfRow[], totals: { collected: number; passthrough: number; nonRecoverable: number; net: number }, company?: CompanyProfile | null) {
   reportPdf({
+    company,
     docTitle: 'PROFIT & LOSS',
     subtitle: period,
     fileName: `propmaster-pnl-${period.replace(/[^\w-]+/g, '-').toLowerCase()}.pdf`,
@@ -289,8 +325,9 @@ export interface RentRollPdfRow {
   status: string;
 }
 
-export function downloadRentRollPdf(rows: RentRollPdfRow[], totals: { rent: number; deposits: number; outstanding: number; occupancy: string }) {
+export function downloadRentRollPdf(rows: RentRollPdfRow[], totals: { rent: number; deposits: number; outstanding: number; occupancy: string }, company?: CompanyProfile | null) {
   reportPdf({
+    company,
     docTitle: 'RENT ROLL',
     subtitle: formatDate(new Date().toISOString().split('T')[0]),
     fileName: `propmaster-rent-roll-${new Date().toISOString().split('T')[0]}.pdf`,
@@ -328,8 +365,9 @@ export interface OutstandingPdfRow {
   daysOverdue: number;
 }
 
-export function downloadOutstandingPdf(rows: OutstandingPdfRow[], totals: { overdue: number; sent: number; draft: number; total: number }) {
+export function downloadOutstandingPdf(rows: OutstandingPdfRow[], totals: { overdue: number; sent: number; draft: number; total: number }, company?: CompanyProfile | null) {
   reportPdf({
+    company,
     docTitle: 'OUTSTANDING INVOICES',
     subtitle: formatDate(new Date().toISOString().split('T')[0]),
     fileName: `propmaster-outstanding-${new Date().toISOString().split('T')[0]}.pdf`,

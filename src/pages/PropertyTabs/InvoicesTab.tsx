@@ -508,7 +508,7 @@ function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete, onDown
 
 // ── Invoices Tab ───────────────────────────────────────────
 export function InvoicesTab({ propertyId }: Props) {
-  const { invoices, payments, leases, tenants, properties, updateInvoice, deleteInvoice, showToast } = useApp();
+  const { invoices, payments, leases, tenants, properties, companyProfile, updateInvoice, deleteInvoice, showToast } = useApp();
   const [showAdd, setShowAdd] = useState(false);
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -535,7 +535,7 @@ export function InvoicesTab({ propertyId }: Props) {
     const tenant = lease ? tenants.find(t => t.id === lease.tenantId) || null : null;
     const invPayments = payments.filter(p => p.invoiceId === inv.id && p.status === 'verified');
     const { downloadInvoicePdf } = await import('../../utils/pdf');
-    downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments });
+    downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments, company: companyProfile });
   };
 
   // Outstanding = remaining balance on sent/partial/overdue invoices

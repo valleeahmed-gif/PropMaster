@@ -251,7 +251,7 @@ export function TenantsPage() {
 // ── Invoices Page ──────────────────────────────────────────
 export function InvoicesPage() {
   const navigate = useNavigate();
-  const { invoices, properties, leases, tenants, payments, updateInvoice, showToast, user } = useApp();
+  const { invoices, properties, leases, tenants, payments, companyProfile, updateInvoice, showToast, user } = useApp();
   const [filter, setFilter] = useState<string>('all');
   const [payingInvoice, setPayingInvoice] = useState<any>(null);
 
@@ -278,7 +278,7 @@ export function InvoicesPage() {
     const tenant = lease ? tenants.find(t => t.id === lease.tenantId) || null : null;
     const invPayments = payments.filter(p => p.invoiceId === inv.id && p.status === 'verified');
     const { downloadInvoicePdf } = await import('../utils/pdf');
-    downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments });
+    downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments, company: companyProfile });
   };
 
   return (

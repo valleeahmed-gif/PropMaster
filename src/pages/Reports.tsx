@@ -38,7 +38,7 @@ function ReportStat({ label, value, sub, positive, neutral }: {
 
 // ── P&L Report ─────────────────────────────────────────────
 function ProfitLossReport() {
-  const { properties, invoices, payments, propertyCosts, utilityBreakdowns, user } = useApp();
+  const { properties, invoices, payments, propertyCosts, utilityBreakdowns, companyProfile, user } = useApp();
 
   const now = new Date();
   const [fromMonth, setFromMonth] = useState(1);
@@ -226,6 +226,7 @@ function ProfitLossReport() {
         paymentCount: r.paymentCount,
       })),
       totals,
+      companyProfile,
     );
   };
 
@@ -501,7 +502,7 @@ function ProfitLossReport() {
 
 // ── Rent Roll Report ───────────────────────────────────────
 function RentRollReport() {
-  const { properties, leases, tenants, invoices, payments, user } = useApp();
+  const { properties, leases, tenants, invoices, payments, companyProfile, user } = useApp();
 
   const myProperties = properties.filter(p => p.ownerId === user?.id);
   const activeLeases = leases.filter(l => l.ownerId === user?.id && l.status === 'active');
@@ -581,6 +582,7 @@ function RentRollReport() {
         status: r.lease ? 'Tenanted' : 'Vacant',
       })),
       { rent: totalMonthlyRent, deposits: totalDeposits, outstanding: totalOutstanding, occupancy: `${occupancyRate}%` },
+      companyProfile,
     );
   };
 
@@ -728,7 +730,7 @@ function RentRollReport() {
 
 // ── Outstanding Invoices Report ────────────────────────────
 function OutstandingReport() {
-  const { invoices, payments, properties, leases, tenants, updateInvoice, showToast, user } = useApp();
+  const { invoices, payments, properties, leases, tenants, companyProfile, updateInvoice, showToast, user } = useApp();
 
   const myInvoices = invoices.filter(i => i.ownerId === user?.id);
 
@@ -803,6 +805,7 @@ function OutstandingReport() {
         daysOverdue: days,
       })),
       totals,
+      companyProfile,
     );
   };
 
