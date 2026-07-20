@@ -13,7 +13,15 @@ export default defineConfig({
         main: resolve(__dirname, 'index.html'),
         // React app at /app
         app: resolve(__dirname, 'app/index.html'),
-      }
+      },
+      output: {
+        // Split stable vendor code from app code so returning visitors
+        // keep cached vendor chunks across app deploys.
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+        },
+      },
     }
   }
 })

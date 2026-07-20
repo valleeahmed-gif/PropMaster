@@ -213,6 +213,22 @@ function ProfitLossReport() {
     exportCSV(`propmaster-pnl-${fromMonth}-${fromYear}-to-${toMonth}-${toYear}.csv`, headers, rows);
   };
 
+  const handleExportPdf = async () => {
+    const { downloadPnlPdf } = await import('../utils/pdf');
+    downloadPnlPdf(
+      `${formatMonthYear(fromMonth, fromYear)} to ${formatMonthYear(toMonth, toYear)}`,
+      pnlData.map(r => ({
+        propertyName: r.property.name,
+        collected: r.totalCollected,
+        passthrough: r.recoverableCosts,
+        ownCosts: r.nonRecoverableCosts,
+        net: r.netProfit,
+        paymentCount: r.paymentCount,
+      })),
+      totals,
+    );
+  };
+
   return (
     <div className="space-y-5">
 
@@ -299,9 +315,14 @@ function ProfitLossReport() {
           <h3 className="text-sm font-semibold text-gray-900">
             P&amp;L by property — {formatMonthYear(fromMonth, fromYear)} to {formatMonthYear(toMonth, toYear)}
           </h3>
-          <button onClick={handleExport} className="btn-secondary text-xs gap-1.5">
-            <Download size={13} /> Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleExportPdf} className="btn-primary text-xs gap-1.5">
+              <FileText size={13} /> PDF
+            </button>
+            <button onClick={handleExport} className="btn-secondary text-xs gap-1.5">
+              <Download size={13} /> CSV
+            </button>
+          </div>
         </div>
 
         {pnlData.length === 0 ? (
@@ -486,6 +507,14 @@ function RentRollReport() {
   const activeLeases = leases.filter(l => l.ownerId === user?.id && l.status === 'active');
   const endedLeases = leases.filter(l => l.ownerId === user?.id && l.status === 'ended');
 
+  // Remaining balance on an invoice after verified payments
+  const balanceOf = (invId: string, total: number) => {
+    const paid = payments
+      .filter(p => p.invoiceId === invId && p.status === 'verified')
+      .reduce((s, p) => s + p.amount, 0);
+    return Math.max(total - paid, 0);
+  };
+
   const rentRollRows = myProperties.map(prop => {
     const lease = activeLeases.find(l => l.propertyId === prop.id);
     const tenant = lease ? tenants.find(t => t.id === lease.tenantId) : null;
@@ -495,10 +524,10 @@ function RentRollReport() {
       .sort((a, b) => b.paymentDate.localeCompare(a.paymentDate));
     const lastPayment = propPayments[0];
 
-    // Outstanding amount
+    // Outstanding = remaining balances on sent/partial/overdue invoices
     const outstanding = invoices
-      .filter(i => i.propertyId === prop.id && (i.status === 'sent' || i.status === 'overdue'))
-      .reduce((s, i) => s + i.totalAmount, 0);
+      .filter(i => i.propertyId === prop.id && (i.status === 'sent' || i.status === 'overdue' || i.status === 'partial'))
+      .reduce((s, i) => s + balanceOf(i.id, i.totalAmount), 0);
 
     // Days until lease end
     let daysToExpiry: number | null = null;
@@ -536,6 +565,25 @@ function RentRollReport() {
     exportCSV(`propmaster-rent-roll-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
   };
 
+  const handleExportPdf = async () => {
+    const { downloadRentRollPdf } = await import('../utils/pdf');
+    downloadRentRollPdf(
+      rentRollRows.map(r => ({
+        propertyName: r.prop.name,
+        city: r.prop.city,
+        tenantName: r.tenant?.name || 'Vacant',
+        rent: r.lease?.rentAmount ?? null,
+        deposit: r.lease?.depositPaid ?? null,
+        leasePeriod: r.lease
+          ? `${formatDate(r.lease.startDate)} - ${r.lease.endDate ? formatDate(r.lease.endDate) : 'Open-ended'}`
+          : '-',
+        outstanding: r.outstanding,
+        status: r.lease ? 'Tenanted' : 'Vacant',
+      })),
+      { rent: totalMonthlyRent, deposits: totalDeposits, outstanding: totalOutstanding, occupancy: `${occupancyRate}%` },
+    );
+  };
+
   return (
     <div className="space-y-5">
       {/* Summary */}
@@ -550,9 +598,14 @@ function RentRollReport() {
       <div className="card overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-surface-100">
           <h3 className="text-sm font-semibold text-gray-900">Active leases — Rent roll</h3>
-          <button onClick={handleExport} className="btn-secondary text-xs gap-1.5">
-            <Download size={13} /> Export CSV
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleExportPdf} className="btn-primary text-xs gap-1.5">
+              <FileText size={13} /> PDF
+            </button>
+            <button onClick={handleExport} className="btn-secondary text-xs gap-1.5">
+              <Download size={13} /> CSV
+            </button>
+          </div>
         </div>
 
         {rentRollRows.length === 0 ? (
@@ -675,20 +728,32 @@ function RentRollReport() {
 
 // ── Outstanding Invoices Report ────────────────────────────
 function OutstandingReport() {
-  const { invoices, properties, leases, tenants, updateInvoice, showToast, user } = useApp();
+  const { invoices, payments, properties, leases, tenants, updateInvoice, showToast, user } = useApp();
 
   const myInvoices = invoices.filter(i => i.ownerId === user?.id);
-  const outstanding = [...myInvoices.filter(i => i.status === 'sent' || i.status === 'overdue' || i.status === 'draft')]
+
+  // Balance still owed on an invoice after verified payments — a partial
+  // invoice counts only its remaining balance, not the full face value.
+  const balanceOf = (inv: typeof myInvoices[number]) => {
+    const paid = payments
+      .filter(p => p.invoiceId === inv.id && p.status === 'verified')
+      .reduce((s, p) => s + p.amount, 0);
+    return Math.max(inv.totalAmount - paid, 0);
+  };
+
+  const outstanding = [...myInvoices.filter(i =>
+    i.status === 'sent' || i.status === 'overdue' || i.status === 'partial' || i.status === 'draft'
+  )]
     .sort((a, b) => {
-      const order = { overdue: 0, sent: 1, draft: 2 };
-      return (order[a.status as keyof typeof order] ?? 3) - (order[b.status as keyof typeof order] ?? 3);
+      const order = { overdue: 0, partial: 1, sent: 2, draft: 3 };
+      return (order[a.status as keyof typeof order] ?? 4) - (order[b.status as keyof typeof order] ?? 4);
     });
 
   const totals = {
-    overdue: outstanding.filter(i => i.status === 'overdue').reduce((s, i) => s + i.totalAmount, 0),
-    sent: outstanding.filter(i => i.status === 'sent').reduce((s, i) => s + i.totalAmount, 0),
+    overdue: outstanding.filter(i => i.status === 'overdue').reduce((s, i) => s + balanceOf(i), 0),
+    sent: outstanding.filter(i => i.status === 'sent' || i.status === 'partial').reduce((s, i) => s + balanceOf(i), 0),
     draft: outstanding.filter(i => i.status === 'draft').reduce((s, i) => s + i.totalAmount, 0),
-    total: outstanding.reduce((s, i) => s + i.totalAmount, 0),
+    total: outstanding.reduce((s, i) => s + (i.status === 'draft' ? i.totalAmount : balanceOf(i)), 0),
   };
 
   const daysOverdue = (dueDateStr: string) => {
@@ -696,25 +761,49 @@ function OutstandingReport() {
     return days > 0 ? days : 0;
   };
 
+  const buildRows = () => outstanding.map(inv => {
+    const prop = properties.find(p => p.id === inv.propertyId);
+    const lease = leases.find(l => l.id === inv.leaseId);
+    const tenant = lease ? tenants.find(t => t.id === lease.tenantId) : null;
+    return {
+      inv, prop, tenant,
+      balance: inv.status === 'draft' ? inv.totalAmount : balanceOf(inv),
+      days: inv.status === 'overdue' ? daysOverdue(inv.dueDate) : 0,
+    };
+  });
+
   const handleExport = () => {
-    const headers = ['Invoice #', 'Property', 'Tenant', 'Month', 'Due Date', 'Amount (ZAR)', 'Status', 'Days Overdue'];
-    const rows = outstanding.map(inv => {
-      const prop = properties.find(p => p.id === inv.propertyId);
-      const lease = leases.find(l => l.id === inv.leaseId);
-      const tenant = lease ? tenants.find(t => t.id === lease.tenantId) : null;
-      const days = inv.status === 'overdue' ? daysOverdue(inv.dueDate) : 0;
-      return [
-        inv.invoiceNumber,
-        prop?.name || '—',
-        tenant?.name || '—',
-        formatMonthYear(inv.month, inv.year),
-        formatDate(inv.dueDate),
-        inv.totalAmount.toFixed(2),
-        inv.status,
-        days,
-      ];
-    });
+    const headers = ['Invoice #', 'Property', 'Tenant', 'Month', 'Due Date', 'Invoice Total (ZAR)', 'Balance Due (ZAR)', 'Status', 'Days Overdue'];
+    const rows = buildRows().map(({ inv, prop, tenant, balance, days }) => [
+      inv.invoiceNumber,
+      prop?.name || '—',
+      tenant?.name || '—',
+      formatMonthYear(inv.month, inv.year),
+      formatDate(inv.dueDate),
+      inv.totalAmount.toFixed(2),
+      balance.toFixed(2),
+      inv.status,
+      days,
+    ]);
     exportCSV(`propmaster-outstanding-${new Date().toISOString().split('T')[0]}.csv`, headers, rows);
+  };
+
+  const handleExportPdf = async () => {
+    const { downloadOutstandingPdf } = await import('../utils/pdf');
+    downloadOutstandingPdf(
+      buildRows().map(({ inv, prop, tenant, balance, days }) => ({
+        invoiceNumber: inv.invoiceNumber,
+        propertyName: prop?.name || '-',
+        tenantName: tenant?.name || '-',
+        period: formatMonthYear(inv.month, inv.year),
+        dueDate: formatDate(inv.dueDate),
+        amount: inv.totalAmount,
+        balance,
+        status: inv.status,
+        daysOverdue: days,
+      })),
+      totals,
+    );
   };
 
   const markOverdue = async (id: string) => {
@@ -734,7 +823,7 @@ function OutstandingReport() {
         <div className="card p-4 border-l-4 border-amber-400">
           <p className="text-xs text-gray-500 mb-1">Awaiting payment</p>
           <p className="text-xl font-bold text-amber-700">{formatCurrency(totals.sent)}</p>
-          <p className="text-xs text-gray-400">{outstanding.filter(i => i.status === 'sent').length} invoices</p>
+          <p className="text-xs text-gray-400">{outstanding.filter(i => i.status === 'sent' || i.status === 'partial').length} invoices</p>
         </div>
         <div className="card p-4 border-l-4 border-gray-300">
           <p className="text-xs text-gray-500 mb-1">Draft</p>
@@ -753,8 +842,11 @@ function OutstandingReport() {
             {outstanding.length > 0 && (
               <span className="text-sm font-bold text-gray-900">{formatCurrency(totals.total)}</span>
             )}
+            <button onClick={handleExportPdf} className="btn-primary text-xs gap-1.5">
+              <FileText size={13} /> PDF
+            </button>
             <button onClick={handleExport} className="btn-secondary text-xs gap-1.5">
-              <Download size={13} /> Export CSV
+              <Download size={13} /> CSV
             </button>
           </div>
         </div>
@@ -783,6 +875,7 @@ function OutstandingReport() {
                   const lease = leases.find(l => l.id === inv.leaseId);
                   const tenant = lease ? tenants.find(t => t.id === lease.tenantId) : null;
                   const overdueDays = inv.status === 'overdue' ? daysOverdue(inv.dueDate) : 0;
+                  const balance = inv.status === 'draft' ? inv.totalAmount : balanceOf(inv);
 
                   return (
                     <tr key={inv.id} className="table-row">
@@ -806,7 +899,10 @@ function OutstandingReport() {
                         )}
                       </td>
                       <td className="table-cell">
-                        <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.totalAmount)}</p>
+                        <p className="text-sm font-bold text-gray-900">{formatCurrency(balance)}</p>
+                        {balance < inv.totalAmount && (
+                          <p className="text-xs text-gray-400">of {formatCurrency(inv.totalAmount)}</p>
+                        )}
                       </td>
                       <td className="table-cell">
                         <StatusBadge status={inv.status} />

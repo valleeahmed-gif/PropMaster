@@ -7,6 +7,7 @@
   <meta name="description" content="PropMaster helps South African landlords manage properties, tenants, invoices and payments, all in one place." />
   <link rel="icon" type="image/png" href="/propmaster-logo.png" />
   <link rel="apple-touch-icon" href="/icon-192.png" />
+  <meta name="theme-color" content="#007749" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,300;0,6..12,400;0,6..12,600;0,6..12,700;0,6..12,800;1,6..12,400&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;1,9..144,400&display=swap" rel="stylesheet" />
@@ -14,12 +15,12 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --brand: #0e7c64;
-      --brand-dark: #0c4f43;
-      --brand-light: #d6f3e7;
-      --brand-mid: #47b698;
-      --brass: #c9972a;
-      --brass-light: #fdf3dc;
+      --brand: #007749;
+      --brand-dark: #00603b;
+      --brand-light: #c8ecda;
+      --brand-mid: #27a468;
+      --brass: #dd9a0b;
+      --brass-light: #fff8e8;
       --surface: #f9f9f6;
       --white: #ffffff;
       --text-primary: #16201d;
@@ -172,7 +173,7 @@
       display: flex; align-items: center; gap: 6px;
       font-size: 12px; font-weight: 500; color: var(--text-muted);
     }
-    .hero-trust-item svg { color: #22c55e; flex-shrink: 0; }
+    .hero-trust-item svg { color: #0f8d55; flex-shrink: 0; }
     .hero-visual { position: relative; }
     .hero-img-wrap {
       border-radius: 20px; overflow: hidden;
@@ -202,7 +203,7 @@
     }
     .hero-stats-label { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
     .hero-stats-row { display: flex; align-items: center; gap: 6px; }
-    .hero-stats-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: dotPulse 2s infinite; }
+    .hero-stats-dot { width: 8px; height: 8px; border-radius: 50%; background: #0f8d55; animation: dotPulse 2s infinite; }
     .hero-stats-text { font-size: 13px; font-weight: 600; color: var(--text-primary); }
     .hero-img-bottom { height: 56px; background: linear-gradient(180deg, #eef5f1 0%, white 100%); margin-top: -1px; }
 
@@ -284,14 +285,14 @@
       font-size: 15px; color: var(--text-secondary); line-height: 1.65;
     }
     .check {
-      width: 21px; height: 21px; background: #dcfce7;
+      width: 21px; height: 21px; background: #c8ecda;
       border-radius: 50%; display: flex; align-items: center;
       justify-content: center; flex-shrink: 0; margin-top: 1px; font-size: 11px;
     }
 
     /* ── AI section ── */
     .ai-section {
-      background: linear-gradient(135deg, #052520 0%, #0c4f43 50%, #0e7c64 100%);
+      background: linear-gradient(135deg, #002317 0%, #00603b 50%, #007749 100%);
       border-radius: 22px; padding: 64px;
       display: grid; grid-template-columns: 1fr 1fr;
       gap: 56px; align-items: center;
@@ -303,7 +304,7 @@
       width: 400px; height: 400px;
       background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
     }
-    .ai-section .section-eyebrow { color: #7dd2b8; }
+    .ai-section .section-eyebrow { color: #93dab6; }
     .ai-section .section-title { color: #fff; }
     .ai-section .section-sub { color: rgba(255,255,255,0.68); }
     .ai-pill {
@@ -312,7 +313,7 @@
       font-size: 13px; font-weight: 500;
       padding: 7px 15px; border-radius: 99px; margin-top: 26px;
     }
-    .ai-pill span { width: 8px; height: 8px; background: #4ade80; border-radius: 50%; animation: dotPulse 2s infinite; }
+    .ai-pill span { width: 8px; height: 8px; background: #58c28e; border-radius: 50%; animation: dotPulse 2s infinite; }
     .ai-visual {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.13);
@@ -331,7 +332,7 @@
     .ai-item-label { font-size: 13px; color: rgba(255,255,255,0.78); }
     .ai-item-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 99px; }
     .ai-item-amount { font-size: 13px; font-weight: 700; color: #fff; }
-    .badge-tenant { background: rgba(74,222,128,0.18); color: #4ade80; }
+    .badge-tenant { background: rgba(88,194,142,0.18); color: #58c28e; }
     .badge-owner { background: rgba(148,163,184,0.18); color: rgba(255,255,255,0.55); }
 
     /* ── SA section ── */
@@ -497,12 +498,12 @@
     </div>
     <div class="features-grid">
       <div class="feature-card fade-up">
-        <div class="feature-icon" style="background:#d6f3e7">🏠</div>
+        <div class="feature-icon" style="background:#c8ecda">🏠</div>
         <div class="feature-title">Property management</div>
         <p class="feature-desc">Add unlimited properties with full details, track occupancy at a glance and see your entire portfolio on one dashboard.</p>
       </div>
       <div class="feature-card fade-up fade-up-delay-1">
-        <div class="feature-icon" style="background:#dcfce7">👤</div>
+        <div class="feature-icon" style="background:#c8ecda">👤</div>
         <div class="feature-title">Tenant and lease tracking</div>
         <p class="feature-desc">Create tenants, attach them to properties, set lease dates, record deposits and send email invites so tenants can view their own portal.</p>
       </div>
@@ -517,7 +518,7 @@
         <p class="feature-desc">Record EFT, cash and PayFast payments and link them directly to invoices. Your full payment history is always one tap away.</p>
       </div>
       <div class="feature-card fade-up fade-up-delay-1">
-        <div class="feature-icon" style="background:#d6f3e7">⚡</div>
+        <div class="feature-icon" style="background:#c8ecda">⚡</div>
         <div class="feature-title">Running costs</div>
         <p class="feature-desc">Track monthly utility costs per property. Toggle each item as tenant-recoverable or owner-pays, and they flow straight into the next invoice.</p>
       </div>
@@ -608,9 +609,9 @@
       </div>
       <div class="ai-visual">
         <div class="ai-visual-header">
-          <div class="ai-visual-dot" style="background:#4ade80"></div>
-          <div class="ai-visual-dot" style="background:#facc15; margin-left:4px"></div>
-          <div class="ai-visual-dot" style="background:#f87171; margin-left:4px"></div>
+          <div class="ai-visual-dot" style="background:#58c28e"></div>
+          <div class="ai-visual-dot" style="background:#ffb81c; margin-left:4px"></div>
+          <div class="ai-visual-dot" style="background:#e03c31; margin-left:4px"></div>
           <div class="ai-visual-title" style="margin-left:8px">Extracted from COJ_Nov2024.pdf</div>
         </div>
         <div class="ai-item">
@@ -643,7 +644,7 @@
         </div>
         <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.09);display:flex;justify-content:space-between;align-items:center">
           <span style="font-size:11px;color:rgba(255,255,255,0.4)">4 items extracted, review before saving</span>
-          <span style="font-size:13px;font-weight:700;color:#4ade80">→ Add to costs</span>
+          <span style="font-size:13px;font-weight:700;color:#58c28e">→ Add to costs</span>
         </div>
       </div>
     </div>

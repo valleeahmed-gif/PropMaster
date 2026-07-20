@@ -80,7 +80,7 @@ export function Sidebar({ mobile }: SidebarProps) {
       <div className="px-3 pt-3 pb-4 border-t border-white/10">
         <div className="flex items-center gap-3 px-2 py-2 mb-2">
           <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-               style={{ background: 'linear-gradient(135deg, #cea22a 0%, #7e5414 100%)' }}>
+               style={{ background: 'linear-gradient(135deg, #ffb81c 0%, #a87407 100%)' }}>
             <span className="text-xs font-bold text-white">{initials}</span>
           </div>
           <div className="min-w-0 flex-1">
@@ -116,7 +116,7 @@ export function MobileSidebarOverlay() {
         className={`fixed left-0 top-0 bottom-0 w-72 z-50 lg:hidden transition-transform duration-300 ease-out shadow-2xl ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
-        style={{ background: 'linear-gradient(180deg, #094c40 0%, #03241f 100%)' }}
+        style={{ background: 'linear-gradient(180deg, #004d30 0%, #002317 100%)' }}
         role="dialog"
         aria-label="Navigation menu"
       >

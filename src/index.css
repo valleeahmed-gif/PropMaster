@@ -1,4 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:ital,opsz,wght@0,6..12,300;0,6..12,400;0,6..12,600;0,6..12,700;0,6..12,800;1,6..12,400&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&display=swap');
+/* Fonts are loaded via <link> tags in app/index.html — a CSS @import here
+   would serialise behind the stylesheet and block first paint. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -25,11 +26,11 @@
   }
 
   :root {
-    --brand: #0e7c64;
-    --brand-dark: #094c40;
-    --brand-deep: #03241f;
-    --brand-light: #d2f3e5;
-    --brass: #b88719;
+    --brand: #007749;
+    --brand-dark: #004d30;
+    --brand-deep: #002317;
+    --brand-light: #c8ecda;
+    --brass: #ffb81c;
     --surface: #ffffff;
     --surface-warm: #fcfcfa;
     --border: #ecede7;
@@ -138,7 +139,7 @@
   .badge-green { @apply badge bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-100; }
   .badge-amber { @apply badge bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-100; }
   .badge-red   { @apply badge bg-red-50   text-red-700   ring-1 ring-inset ring-red-100; }
-  .badge-blue  { @apply badge bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-100; }
+  .badge-blue  { @apply badge bg-blue-50 text-blue-900 ring-1 ring-inset ring-blue-100; }
   .badge-gray  { @apply badge bg-surface-100 text-ink-500 ring-1 ring-inset ring-surface-200; }
   .badge-brass { @apply badge bg-brass-50 text-brass-700 ring-1 ring-inset ring-brass-100; }
 

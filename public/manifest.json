@@ -6,7 +6,7 @@
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#f1f3f9",
-  "theme_color": "#0e7c64",
+  "theme_color": "#007749",
   "icons": [
     {
       "src": "/propmaster-logo.png",

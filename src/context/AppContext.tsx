@@ -271,38 +271,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const isAcceptInvite = typeof window !== 'undefined' &&
       window.location.pathname.includes('/accept-invite');
 
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      setSession(s);
-      if (s?.user && !isAcceptInvite) {
-        const role = await detectRole(s.user);
-        if (role) {
-          setUser({ id: s.user.id, name: s.user.user_metadata?.name || s.user.email || '', email: s.user.email || '', role, createdAt: s.user.created_at });
-          if (role === 'landlord') refreshData();
-        }
-      }
-      setAuthLoading(false);
-    });
+    // Track the currently-loaded user so TOKEN_REFRESHED (fires ~hourly)
+    // and tab-refocus SIGNED_IN events don't re-detect the role and refetch
+    // the entire portfolio — that caused periodic full-app re-render jank.
+    let loadedUserId: string | null = null;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
+    const applySession = async (s: Session | null) => {
       setSession(s);
-      // On accept-invite, never set the user from the magic-link session —
-      // AcceptInvitePage will handle linking and the final redirect.
-      const stillOnAcceptInvite = typeof window !== 'undefined' &&
-        window.location.pathname.includes('/accept-invite');
-      if (stillOnAcceptInvite) return;
-
-      if (s?.user) {
-        const role = await detectRole(s.user);
-        if (role) {
-          setUser({ id: s.user.id, name: s.user.user_metadata?.name || s.user.email || '', email: s.user.email || '', role, createdAt: s.user.created_at });
-          if (role === 'landlord') refreshData();
-        }
-      } else {
+      if (!s?.user) {
+        loadedUserId = null;
         setUser(null);
         setProperties([]); setTenants([]); setLeases([]);
         setPropertyCosts([]); setUtilityBreakdowns([]); setInvoices([]);
         setPayments([]); setMaintenanceRequests([]); setStatementUploads([]);
+        return;
       }
+      if (s.user.id === loadedUserId) return; // same user — nothing to reload
+      loadedUserId = s.user.id;
+      const role = await detectRole(s.user);
+      if (role) {
+        setUser({ id: s.user.id, name: s.user.user_metadata?.name || s.user.email || '', email: s.user.email || '', role, createdAt: s.user.created_at });
+        if (role === 'landlord') refreshData();
+      }
+    };
+
+    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
+      if (!isAcceptInvite) await applySession(s);
+      else setSession(s);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
+      // On accept-invite, never set the user from the magic-link session —
+      // AcceptInvitePage will handle linking and the final redirect.
+      const stillOnAcceptInvite = typeof window !== 'undefined' &&
+        window.location.pathname.includes('/accept-invite');
+      if (stillOnAcceptInvite) { setSession(s); return; }
+      await applySession(s);
     });
     return () => subscription.unsubscribe();
   }, [refreshData, detectRole]);
@@ -591,8 +596,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Invoices ──────────────────────────────────────────────
   const addInvoice = useCallback(async (data: Omit<Invoice, 'id' | 'ownerId' | 'createdAt' | 'invoiceNumber'>): Promise<Invoice> => {
-    const count = invoices.length + 1;
-    const invoiceNumber = `INV-${data.year}-${String(count).padStart(3, '0')}`;
+    // Next number = highest existing suffix for this year + 1. Counting rows
+    // (the old approach) produced duplicates after a delete or across years,
+    // which the DB's unique (owner_id, invoice_number) constraint rejects.
+    const maxN = invoices
+      .filter(i => i.year === data.year)
+      .reduce((m, i) => {
+        const match = /(\d+)$/.exec(i.invoiceNumber || '');
+        return match ? Math.max(m, parseInt(match[1], 10)) : m;
+      }, 0);
+    const invoiceNumber = `INV-${data.year}-${String(maxN + 1).padStart(3, '0')}`;
     const { data: row, error } = await supabase.from('invoices').insert({
       property_id: data.propertyId, lease_id: data.leaseId, owner_id: user!.id,
       invoice_number: invoiceNumber, month: data.month, year: data.year,
@@ -636,19 +649,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // ── Smart invoice status after payment ─────────────────
     if (data.invoiceId) {
-      setInvoices(prev => {
-        const inv = prev.find(i => i.id === data.invoiceId);
-        if (!inv) return prev;
-
-        // Sum all existing verified payments for this invoice + this new one
-        const existingPaid = prev
-          .filter(i => i.id === data.invoiceId)
-          .reduce((_, __) => 0, 0); // placeholder — we calculate below
-
-        // We need access to the payments state here; use a callback approach
-        return prev; // will be updated in the next block
-      });
-
       // Get all payments for this invoice after insert
       const { data: invPayments } = await supabase
         .from('payments')

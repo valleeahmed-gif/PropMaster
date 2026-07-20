@@ -38,7 +38,7 @@ export function Layout({ children }: LayoutProps) {
       {/* Desktop sidebar */}
       <aside
         className="hidden lg:flex flex-col w-64 flex-shrink-0"
-        style={{ background: 'linear-gradient(180deg, #094c40 0%, #03241f 100%)' }}
+        style={{ background: 'linear-gradient(180deg, #004d30 0%, #002317 100%)' }}
         aria-label="Sidebar navigation"
       >
         <Sidebar />

@@ -33,7 +33,11 @@ export function DashboardPage() {
 
   const overdueInvoices = myInvoices.filter(i => i.status === 'overdue');
   const sentInvoices    = myInvoices.filter(i => i.status === 'sent' || i.status === 'partial');
-  const totalOutstanding = [...overdueInvoices, ...sentInvoices].reduce((s, i) => s + i.totalAmount, 0);
+  // Outstanding = remaining balances (partial invoices net of verified payments)
+  const totalOutstanding = [...overdueInvoices, ...sentInvoices].reduce((s, i) => {
+    const paid = myPayments.filter(p => p.invoiceId === i.id && p.status === 'verified').reduce((ps, p) => ps + p.amount, 0);
+    return s + Math.max(i.totalAmount - paid, 0);
+  }, 0);
   const vacantProperties = myProperties.filter(p => !myLeases.find(l => l.propertyId === p.id));
   const recentPayments  = [...myPayments].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
   const recentMaintenance = [...myMaintenance]

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, FileText, Send, CreditCard, Trash2, ChevronDown, ChevronUp, Edit2, AlertTriangle } from 'lucide-react';
+import { Plus, FileText, Send, CreditCard, Trash2, ChevronDown, ChevronUp, Edit2, AlertTriangle, Download } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Modal, ConfirmDialog, EmptyState, StatusBadge, Field, Select } from '../../components/UI';
 import { RecordPaymentModal } from '../../components/RecordPaymentModal';
@@ -20,6 +20,7 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
   const [dueDate, setDueDate] = useState('');
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [costsAdded, setCostsAdded] = useState(false);
 
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
@@ -37,6 +38,7 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
       setYear(now.getFullYear());
       setDueDate('');
       setLineItems([]);
+      setCostsAdded(false);
     }
   }, [open]);
 
@@ -89,7 +91,6 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
     setLineItems(prev => [...prev, { description: '', amount: 0 }]);
 
   const total = lineItems.reduce((s, l) => s + l.amount, 0);
-  const [costsAdded, setCostsAdded] = useState(false);
 
   const handleCreate = async () => {
     if (!dueDate || lineItems.length === 0) return;
@@ -364,12 +365,13 @@ function EditInvoiceModal({ invoice, onClose }: { invoice: Invoice; onClose: () 
 }
 
 // ── Invoice Row ────────────────────────────────────────────
-function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete }: {
+function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete, onDownload }: {
   inv: Invoice;
   onMarkSent: (inv: Invoice) => void;
   onRecordPayment: (inv: Invoice) => void;
   onEdit: (inv: Invoice) => void;
   onDelete: (inv: Invoice) => void;
+  onDownload: (inv: Invoice) => void;
 }) {
   const { payments } = useApp();
   const [expanded, setExpanded] = useState(false);
@@ -432,6 +434,14 @@ function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete }: {
                 <CreditCard size={12} /> {inv.status === 'partial' ? 'Record balance' : 'Record payment'}
               </button>
             )}
+            <button
+              onClick={() => onDownload(inv)}
+              className="p-1.5 rounded-lg hover:bg-brand-50 text-gray-400 hover:text-brand-700"
+              title="Download PDF"
+              aria-label={`Download ${inv.invoiceNumber} as PDF`}
+            >
+              <Download size={13} />
+            </button>
             <button onClick={e => { e.stopPropagation(); setExpanded(x => !x); }} className="p-1.5 text-gray-400 hover:text-gray-600">
               {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>
@@ -498,7 +508,7 @@ function InvoiceRow({ inv, onMarkSent, onRecordPayment, onEdit, onDelete }: {
 
 // ── Invoices Tab ───────────────────────────────────────────
 export function InvoicesTab({ propertyId }: Props) {
-  const { invoices, updateInvoice, deleteInvoice, showToast } = useApp();
+  const { invoices, payments, leases, tenants, properties, updateInvoice, deleteInvoice, showToast } = useApp();
   const [showAdd, setShowAdd] = useState(false);
   const [payingInvoice, setPayingInvoice] = useState<Invoice | null>(null);
   const [editingInvoice, setEditingInvoice] = useState<Invoice | null>(null);
@@ -519,9 +529,22 @@ export function InvoicesTab({ propertyId }: Props) {
     setDeletingInvoice(null);
   };
 
+  const handleDownloadPdf = async (inv: Invoice) => {
+    const property = properties.find(p => p.id === inv.propertyId) || null;
+    const lease = leases.find(l => l.id === inv.leaseId) || null;
+    const tenant = lease ? tenants.find(t => t.id === lease.tenantId) || null : null;
+    const invPayments = payments.filter(p => p.invoiceId === inv.id && p.status === 'verified');
+    const { downloadInvoicePdf } = await import('../../utils/pdf');
+    downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments });
+  };
+
+  // Outstanding = remaining balance on sent/partial/overdue invoices
+  // (partial invoices count only what's still owed, not their full total)
+  const verifiedPaid = (invId: string) =>
+    payments.filter(p => p.invoiceId === invId && p.status === 'verified').reduce((s, p) => s + p.amount, 0);
   const totalOutstanding = propInvoices
-    .filter(i => i.status === 'sent' || i.status === 'overdue')
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .filter(i => i.status === 'sent' || i.status === 'overdue' || i.status === 'partial')
+    .reduce((s, i) => s + Math.max(i.totalAmount - verifiedPaid(i.id), 0), 0);
 
   return (
     <div>
@@ -556,6 +579,7 @@ export function InvoicesTab({ propertyId }: Props) {
               onRecordPayment={setPayingInvoice}
               onEdit={setEditingInvoice}
               onDelete={setDeletingInvoice}
+              onDownload={handleDownloadPdf}
             />
           ))}
         </div>

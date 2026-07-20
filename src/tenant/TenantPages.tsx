@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Building2, Calendar, CreditCard, FileText, Wrench, CheckCircle, Clock,
   AlertCircle, Plus, ChevronDown, ChevronUp, RotateCcw, Sparkles
@@ -50,8 +51,9 @@ function StateCard({ icon, title, message, action }: {
 // ── Home Page ──────────────────────────────────────────────
 // ────────────────────────────────────────────────────────────
 export function TenantHomePage() {
+  const navigate = useNavigate();
   const {
-    tenantRecord, activeLease, property, invoices, maintenanceRequests,
+    tenantRecord, activeLease, property, invoices, payments, maintenanceRequests,
     dataLoading, initialized, loadError, refreshData
   } = useTenant();
 
@@ -101,7 +103,11 @@ export function TenantHomePage() {
 
   // Happy path
   const unpaidInvoices = invoices.filter(i => i.status === 'sent' || i.status === 'partial' || i.status === 'overdue');
-  const totalOutstanding = unpaidInvoices.reduce((s, i) => s + i.totalAmount, 0);
+  // Remaining balances — partial invoices count only what's still owed
+  const totalOutstanding = unpaidInvoices.reduce((s, i) => {
+    const paid = payments.filter(p => p.invoiceId === i.id).reduce((ps, p) => ps + p.amount, 0);
+    return s + Math.max(i.totalAmount - paid, 0);
+  }, 0);
   const openMaintenance = maintenanceRequests.filter(m => m.status === 'open' || m.status === 'in_progress');
   const daysToLeaseEnd = activeLease.endDate
     ? Math.ceil((new Date(activeLease.endDate).getTime() - Date.now()) / 86400000)
@@ -114,7 +120,7 @@ export function TenantHomePage() {
       {/* Outstanding alert */}
       {unpaidInvoices.length > 0 && (
         <button
-          onClick={() => window.location.hash = '/tenant/invoices'}
+          onClick={() => navigate('/tenant/invoices')}
           className="card p-4 border-amber-200 bg-amber-50/60 flex items-start gap-3 w-full text-left hover:bg-amber-50 transition-colors"
         >
           <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
@@ -204,7 +210,7 @@ function WelcomeCard({ name, property }: { name: string; property: any }) {
   return (
     <div
       className="rounded-2xl p-6 text-white relative overflow-hidden shadow-md"
-      style={{ background: 'linear-gradient(135deg, #094c40 0%, #03241f 100%)' }}
+      style={{ background: 'linear-gradient(135deg, #004d30 0%, #002317 100%)' }}
     >
       <div
         className="absolute top-0 right-0 w-40 h-40 opacity-10 pointer-events-none"
@@ -272,7 +278,7 @@ function HomeLoading() {
 // ────────────────────────────────────────────────────────────
 // ── Invoices Page ──────────────────────────────────────────
 // ────────────────────────────────────────────────────────────
-function InvoiceRow({ inv, payments }: { inv: Invoice; payments: any[] }) {
+function InvoiceRow({ inv, payments, onDownload }: { inv: Invoice; payments: any[]; onDownload?: (inv: Invoice) => void }) {
   const [expanded, setExpanded] = useState(false);
   const linkedPayments = payments.filter(p => p.invoiceId === inv.id);
   const totalPaid = linkedPayments.reduce((s, p) => s + p.amount, 0);
@@ -366,6 +372,14 @@ function InvoiceRow({ inv, payments }: { inv: Invoice; payments: any[] }) {
               </p>
             </div>
           )}
+          {onDownload && (
+            <button
+              onClick={() => onDownload(inv)}
+              className="btn-secondary text-xs gap-1.5 mt-3"
+            >
+              <FileText size={13} /> Download PDF
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -373,7 +387,7 @@ function InvoiceRow({ inv, payments }: { inv: Invoice; payments: any[] }) {
 }
 
 export function TenantInvoicesPage() {
-  const { invoices, payments, dataLoading, initialized, loadError, refreshData } = useTenant();
+  const { invoices, payments, tenantRecord, property, activeLease, dataLoading, initialized, loadError, refreshData } = useTenant();
   const [filter, setFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
 
   if (dataLoading && !initialized) return <ListLoading />;
@@ -383,9 +397,19 @@ export function TenantInvoicesPage() {
     : filter === 'unpaid' ? invoices.filter(i => i.status === 'sent' || i.status === 'overdue' || i.status === 'partial')
     : invoices.filter(i => i.status === 'paid');
 
+  // Outstanding = remaining balances, netting off payments on partials
   const outstanding = invoices
     .filter(i => i.status === 'sent' || i.status === 'overdue' || i.status === 'partial')
-    .reduce((s, i) => s + i.totalAmount, 0);
+    .reduce((s, i) => {
+      const paid = payments.filter(p => p.invoiceId === i.id).reduce((ps, p) => ps + p.amount, 0);
+      return s + Math.max(i.totalAmount - paid, 0);
+    }, 0);
+
+  const handleDownloadPdf = async (inv: Invoice) => {
+    const invPayments = payments.filter(p => p.invoiceId === inv.id);
+    const { downloadInvoicePdf } = await import('../utils/pdf');
+    downloadInvoicePdf({ invoice: inv, property, tenant: tenantRecord, lease: activeLease, payments: invPayments });
+  };
 
   return (
     <div className="space-y-4">
@@ -428,7 +452,7 @@ export function TenantInvoicesPage() {
         </div>
       ) : (
         <div className="card overflow-hidden">
-          {filtered.map(inv => <InvoiceRow key={inv.id} inv={inv} payments={payments} />)}
+          {filtered.map(inv => <InvoiceRow key={inv.id} inv={inv} payments={payments} onDownload={handleDownloadPdf} />)}
         </div>
       )}
     </div>
