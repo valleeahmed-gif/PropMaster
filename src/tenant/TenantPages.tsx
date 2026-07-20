@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Building2, Calendar, CreditCard, FileText, Wrench, CheckCircle, Clock,
   AlertCircle, Plus, ChevronDown, ChevronUp, RotateCcw, Sparkles
@@ -50,6 +51,7 @@ function StateCard({ icon, title, message, action }: {
 // ── Home Page ──────────────────────────────────────────────
 // ────────────────────────────────────────────────────────────
 export function TenantHomePage() {
+  const navigate = useNavigate();
   const {
     tenantRecord, activeLease, property, invoices, maintenanceRequests,
     dataLoading, initialized, loadError, refreshData
@@ -114,7 +116,7 @@ export function TenantHomePage() {
       {/* Outstanding alert */}
       {unpaidInvoices.length > 0 && (
         <button
-          onClick={() => window.location.hash = '/tenant/invoices'}
+          onClick={() => navigate('/tenant/invoices')}
           className="card p-4 border-amber-200 bg-amber-50/60 flex items-start gap-3 w-full text-left hover:bg-amber-50 transition-colors"
         >
           <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">

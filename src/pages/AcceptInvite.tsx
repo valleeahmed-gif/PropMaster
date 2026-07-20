@@ -75,40 +75,33 @@ export function AcceptInvitePage() {
     if (!tenantId) return;
 
     try {
-      // Load tenant record + property name in parallel
-      const [tenantRes, leaseRes] = await Promise.all([
-        supabase.from('tenants')
-          .select('name, invite_status, user_id')
-          .eq('id', tenantId)
-          .maybeSingle(),
-        supabase.from('leases')
-          .select('properties(name)')
-          .eq('tenant_id', tenantId)
-          .eq('status', 'active')
-          .maybeSingle(),
-      ]);
+      // Load invite details via SECURITY DEFINER RPC — RLS blocks a direct
+      // tenants read before user_id is linked, and the RPC verifies the
+      // caller's email matches the invited tenant's email server-side.
+      const { data: rows, error: rpcErr } = await supabase.rpc('get_invite_info', {
+        p_tenant_id: tenantId,
+      });
+      if (rpcErr) throw rpcErr;
 
-      const tenant = tenantRes.data;
-      const propName = (leaseRes.data as any)?.properties?.name;
-
-      if (!tenant) {
-        setError('We couldn\'t find your tenant record. Please contact your landlord.');
+      const info = Array.isArray(rows) ? rows[0] : rows;
+      if (!info) {
+        setError('We couldn\'t find your invite. Make sure you opened the link with the email address it was sent to, or ask your landlord to resend it.');
         setStep('error');
         return;
       }
 
-      setTenantName(tenant.name);
-      if (propName) setPropertyName(propName);
+      setTenantName(info.tenant_name);
+      if (info.property_name) setPropertyName(info.property_name);
 
-      // Already accepted by someone else? Or different user?
-      if (tenant.invite_status === 'accepted' && tenant.user_id && tenant.user_id !== sbUser.id) {
+      // Already accepted by a different user?
+      if (info.already_claimed) {
         setError('This tenant account has already been claimed by a different user.');
         setStep('error');
         return;
       }
 
       // Already linked to this same user — skip password step
-      if (tenant.invite_status === 'accepted' && tenant.user_id === sbUser.id) {
+      if (info.invite_status === 'accepted' && info.linked_to_caller) {
         setStep('already-linked');
         setTimeout(() => navigate('/tenant/home'), 1800);
         return;
@@ -122,25 +115,21 @@ export function AcceptInvitePage() {
     }
   };
 
-  const linkAccount = async (userId: string) => {
+  const linkAccount = async (_userId: string) => {
     setStep('linking');
     try {
       if (!tenantId) throw new Error('Missing tenant ID');
 
-      // 1. Link auth user to tenant record
-      const { error: tenantErr } = await supabase
-        .from('tenants')
-        .update({ user_id: userId, invite_status: 'accepted' })
-        .eq('id', tenantId);
+      // Link tenant record + set tenant role atomically via SECURITY DEFINER
+      // RPC. A direct update would be silently blocked by RLS (only the
+      // landlord can update tenants), and the role upsert needs an update
+      // the user_roles policies don't allow — the RPC handles both after
+      // verifying the caller's email matches the invite.
+      const { error: rpcErr } = await supabase.rpc('accept_invite', {
+        p_tenant_id: tenantId,
+      });
 
-      if (tenantErr) throw new Error(`Couldn't link tenant: ${tenantErr.message}`);
-
-      // 2. Set/upsert tenant role (overrides any default landlord role from the signup trigger)
-      const { error: roleErr } = await supabase
-        .from('user_roles')
-        .upsert({ user_id: userId, role: 'tenant' }, { onConflict: 'user_id' });
-
-      if (roleErr) throw new Error(`Couldn't set role: ${roleErr.message}`);
+      if (rpcErr) throw new Error(rpcErr.message);
 
       setStep('done');
       // Give the success animation a beat, then redirect

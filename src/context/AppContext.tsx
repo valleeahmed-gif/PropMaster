@@ -591,8 +591,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Invoices ──────────────────────────────────────────────
   const addInvoice = useCallback(async (data: Omit<Invoice, 'id' | 'ownerId' | 'createdAt' | 'invoiceNumber'>): Promise<Invoice> => {
-    const count = invoices.length + 1;
-    const invoiceNumber = `INV-${data.year}-${String(count).padStart(3, '0')}`;
+    // Next number = highest existing suffix for this year + 1. Counting rows
+    // (the old approach) produced duplicates after a delete or across years,
+    // which the DB's unique (owner_id, invoice_number) constraint rejects.
+    const maxN = invoices
+      .filter(i => i.year === data.year)
+      .reduce((m, i) => {
+        const match = /(\d+)$/.exec(i.invoiceNumber || '');
+        return match ? Math.max(m, parseInt(match[1], 10)) : m;
+      }, 0);
+    const invoiceNumber = `INV-${data.year}-${String(maxN + 1).padStart(3, '0')}`;
     const { data: row, error } = await supabase.from('invoices').insert({
       property_id: data.propertyId, lease_id: data.leaseId, owner_id: user!.id,
       invoice_number: invoiceNumber, month: data.month, year: data.year,
@@ -636,19 +644,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     // ── Smart invoice status after payment ─────────────────
     if (data.invoiceId) {
-      setInvoices(prev => {
-        const inv = prev.find(i => i.id === data.invoiceId);
-        if (!inv) return prev;
-
-        // Sum all existing verified payments for this invoice + this new one
-        const existingPaid = prev
-          .filter(i => i.id === data.invoiceId)
-          .reduce((_, __) => 0, 0); // placeholder — we calculate below
-
-        // We need access to the payments state here; use a callback approach
-        return prev; // will be updated in the next block
-      });
-
       // Get all payments for this invoice after insert
       const { data: invPayments } = await supabase
         .from('payments')

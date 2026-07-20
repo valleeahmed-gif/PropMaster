@@ -94,50 +94,61 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
 
   const handleNext = async () => {
     if (!validateTenant()) return;
-    if (mode === 'new') {
-      const displayName = `${tenantForm.firstName} ${tenantForm.lastName}`.trim() || tenantForm.email;
-      const t = await addTenant({
-        customerType: tenantForm.customerType,
-        firstName: tenantForm.firstName.trim() || undefined,
-        lastName: tenantForm.lastName.trim() || undefined,
-        name: displayName,
-        idNumber: tenantForm.idNumber.trim() || undefined,
-        countryIssuing: tenantForm.countryIssuing.trim() || undefined,
-        email: tenantForm.email.trim(),
-        secondaryEmail: tenantForm.secondaryEmail.trim() || undefined,
-        landline: tenantForm.landline.trim() || undefined,
-        phone: tenantForm.phone.trim(),
-        businessAddress: tenantForm.businessAddress.trim() || undefined,
-        businessAddress2: tenantForm.businessAddress2.trim() || undefined,
-        bankName: tenantForm.bankName.trim() || undefined,
-        bankAccountNumber: tenantForm.bankAccountNumber.trim() || undefined,
-        bankBranchCode: tenantForm.bankBranchCode.trim() || undefined,
-      });
-      setCreatedTenantId(t.id);
-    } else {
-      setCreatedTenantId(selectedTenantId);
+    try {
+      if (mode === 'new') {
+        const displayName = `${tenantForm.firstName} ${tenantForm.lastName}`.trim() || tenantForm.email;
+        const t = await addTenant({
+          customerType: tenantForm.customerType,
+          firstName: tenantForm.firstName.trim() || undefined,
+          lastName: tenantForm.lastName.trim() || undefined,
+          name: displayName,
+          idNumber: tenantForm.idNumber.trim() || undefined,
+          countryIssuing: tenantForm.countryIssuing.trim() || undefined,
+          email: tenantForm.email.trim(),
+          secondaryEmail: tenantForm.secondaryEmail.trim() || undefined,
+          landline: tenantForm.landline.trim() || undefined,
+          phone: tenantForm.phone.trim(),
+          businessAddress: tenantForm.businessAddress.trim() || undefined,
+          businessAddress2: tenantForm.businessAddress2.trim() || undefined,
+          bankName: tenantForm.bankName.trim() || undefined,
+          bankAccountNumber: tenantForm.bankAccountNumber.trim() || undefined,
+          bankBranchCode: tenantForm.bankBranchCode.trim() || undefined,
+        });
+        setCreatedTenantId(t.id);
+      } else {
+        setCreatedTenantId(selectedTenantId);
+      }
+      setErrors({});
+      setStep('lease');
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to save tenant — please try again', 'error');
     }
-    setErrors({});
-    setStep('lease');
   };
 
   const handleSave = async () => {
     if (!validateLease()) return;
-    await addLease({
-      propertyId,
-      tenantId: createdTenantId,
-      leaseType: leaseForm.leaseType,
-      startDate: leaseForm.startDate,
-      durationMonths: isFixedTerm && leaseForm.durationMonths ? Number(leaseForm.durationMonths) : undefined,
-      endDate: computedEndDate || undefined,
-      rentFrequency: leaseForm.rentFrequency,
-      dueDay: leaseForm.dueDay ? Number(leaseForm.dueDay) : undefined,
-      rentAmount: Number(leaseForm.rentAmount),
-      depositPaid: Number(leaseForm.depositPaid),
-      status: 'active',
-    });
-    showToast('Tenant and lease created');
-    handleClose();
+    try {
+      await addLease({
+        propertyId,
+        tenantId: createdTenantId,
+        leaseType: leaseForm.leaseType,
+        startDate: leaseForm.startDate,
+        durationMonths: isFixedTerm && leaseForm.durationMonths ? Number(leaseForm.durationMonths) : undefined,
+        endDate: computedEndDate || undefined,
+        rentFrequency: leaseForm.rentFrequency,
+        dueDay: leaseForm.dueDay ? Number(leaseForm.dueDay) : undefined,
+        rentAmount: Number(leaseForm.rentAmount),
+        depositPaid: Number(leaseForm.depositPaid),
+        status: 'active',
+      });
+      showToast('Tenant and lease created');
+      handleClose();
+    } catch (err: any) {
+      const msg = /duplicate|unique|one_active/i.test(err?.message || '')
+        ? 'This property already has an active lease. End it before adding a new one.'
+        : err?.message || 'Failed to create lease — please try again';
+      showToast(msg, 'error');
+    }
   };
 
   return (

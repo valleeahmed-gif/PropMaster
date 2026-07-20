@@ -20,6 +20,7 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
   const [dueDate, setDueDate] = useState('');
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([]);
   const [saving, setSaving] = useState(false);
+  const [costsAdded, setCostsAdded] = useState(false);
 
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
@@ -37,6 +38,7 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
       setYear(now.getFullYear());
       setDueDate('');
       setLineItems([]);
+      setCostsAdded(false);
     }
   }, [open]);
 
@@ -89,7 +91,6 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
     setLineItems(prev => [...prev, { description: '', amount: 0 }]);
 
   const total = lineItems.reduce((s, l) => s + l.amount, 0);
-  const [costsAdded, setCostsAdded] = useState(false);
 
   const handleCreate = async () => {
     if (!dueDate || lineItems.length === 0) return;
