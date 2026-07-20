@@ -117,7 +117,7 @@ export function TenantLayout({ children }: TenantLayoutProps) {
           <div className="flex items-center gap-2 flex-shrink-0">
             <div
               className="w-9 h-9 rounded-full flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #cea22a 0%, #7e5414 100%)' }}
+              style={{ background: 'linear-gradient(135deg, #ffb81c 0%, #a87407 100%)' }}
               aria-label={`Signed in as ${user?.name}`}
             >
               <span className="text-xs font-bold text-white">{initials}</span>

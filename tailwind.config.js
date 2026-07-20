@@ -4,30 +4,52 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Estate green — refined with proper contrast across the scale
-        brand: {
-          50:  '#edfaf4',
-          100: '#d2f3e5',
-          200: '#a7e5cd',
-          300: '#73cfb0',
-          400: '#3eb38f',
-          500: '#1c9573',
-          600: '#0e7c64',  // primary
-          700: '#0a5f4e',
-          800: '#094c40',
-          900: '#083d35',
-          950: '#03241f',  // deepest — used in sidebar
+        // ── South African flag palette ─────────────────────
+        // Exact official colours (SA Government flag spec):
+        //   Green #007749 (PMS 3415C) · Gold #FFB81C (PMS 1235C)
+        //   Red   #E03C31 (PMS 179C)  · Blue #001489 (Reflex Blue)
+        //   Black #000000             · White #FFFFFF
+        flag: {
+          green: '#007749',
+          gold:  '#FFB81C',
+          red:   '#E03C31',
+          blue:  '#001489',
+          black: '#000000',
+          white: '#FFFFFF',
         },
-        // Brass — refined for premium feel
+        // Brand green — scale anchored on the exact flag green at 600
+        brand: {
+          50:  '#e9f7f0',
+          100: '#c8ecda',
+          200: '#93dab6',
+          300: '#58c28e',
+          400: '#27a468',
+          500: '#0f8d55',
+          600: '#007749',  // primary — exact flag green
+          700: '#00603b',
+          800: '#004d30',
+          900: '#003b25',
+          950: '#002317',  // deepest — used in sidebar
+        },
+        // Gold — scale anchored on the exact flag gold at 500
         brass: {
-          50:  '#fbf6e6',
-          100: '#f5ebbf',
-          200: '#ebd684',
-          300: '#dfbb47',
-          400: '#cea22a',
-          500: '#b88719',  // primary brass
-          600: '#a06d15',
-          700: '#7e5414',
+          50:  '#fff8e8',
+          100: '#ffeec2',
+          200: '#ffdf8a',
+          300: '#ffd058',
+          400: '#ffc436',
+          500: '#ffb81c',  // primary — exact flag gold
+          600: '#dd9a0b',
+          700: '#a87407',
+        },
+        // Error red — anchored on the exact flag red
+        red: {
+          500: '#e03c31',  // exact flag red
+          600: '#c93026',
+        },
+        // Info blue — anchored on the exact flag blue
+        blue: {
+          900: '#001489',  // exact flag blue
         },
         // Warm neutral surfaces — feels like quality stationery, not generic
         surface: {
@@ -70,7 +92,7 @@ export default {
         'md':  '0 4px 16px rgba(11,65,56,0.08), 0 0 0 1px rgba(11,65,56,0.04)',
         'lg':  '0 12px 32px rgba(11,65,56,0.10), 0 0 0 1px rgba(11,65,56,0.04)',
         'xl':  '0 24px 56px rgba(11,65,56,0.14), 0 0 0 1px rgba(11,65,56,0.04)',
-        'inner-focus': 'inset 0 0 0 2px rgba(14,124,100,0.25)',
+        'inner-focus': 'inset 0 0 0 2px rgba(0,119,73,0.25)',
       },
       animation: {
         'fade-in':  'fadeIn 0.2s ease-out',

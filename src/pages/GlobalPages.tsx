@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Users, Mail, Phone, Building2, Search, Filter, FileText, CreditCard, Wrench, ChevronRight, Send, Edit2 } from 'lucide-react';
+import { Plus, Users, Mail, Phone, Building2, Search, Filter, FileText, CreditCard, Wrench, ChevronRight, Send, Edit2, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Modal, EmptyState, PageHeader, StatusBadge, PriorityBadge, Field, Select } from '../components/UI';
 import { RecordPaymentModal } from '../components/RecordPaymentModal';
@@ -251,7 +251,7 @@ export function TenantsPage() {
 // ── Invoices Page ──────────────────────────────────────────
 export function InvoicesPage() {
   const navigate = useNavigate();
-  const { invoices, properties, updateInvoice, showToast, user } = useApp();
+  const { invoices, properties, leases, tenants, payments, updateInvoice, showToast, user } = useApp();
   const [filter, setFilter] = useState<string>('all');
   const [payingInvoice, setPayingInvoice] = useState<any>(null);
 
@@ -262,6 +262,7 @@ export function InvoicesPage() {
     { id: 'all', label: 'All', count: myInvoices.length },
     { id: 'draft', label: 'Draft', count: myInvoices.filter(i => i.status === 'draft').length },
     { id: 'sent', label: 'Sent', count: myInvoices.filter(i => i.status === 'sent').length },
+    { id: 'partial', label: 'Partial', count: myInvoices.filter(i => i.status === 'partial').length },
     { id: 'overdue', label: 'Overdue', count: myInvoices.filter(i => i.status === 'overdue').length },
     { id: 'paid', label: 'Paid', count: myInvoices.filter(i => i.status === 'paid').length },
   ];
@@ -269,6 +270,15 @@ export function InvoicesPage() {
   const handleMarkSent = async (inv: any) => {
     await updateInvoice(inv.id, { status: 'sent' });
     showToast(`${inv.invoiceNumber} marked as sent`);
+  };
+
+  const handleDownloadPdf = async (inv: any) => {
+    const property = properties.find(p => p.id === inv.propertyId) || null;
+    const lease = leases.find(l => l.id === inv.leaseId) || null;
+    const tenant = lease ? tenants.find(t => t.id === lease.tenantId) || null : null;
+    const invPayments = payments.filter(p => p.invoiceId === inv.id && p.status === 'verified');
+    const { downloadInvoicePdf } = await import('../utils/pdf');
+    downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments });
   };
 
   return (
@@ -314,16 +324,26 @@ export function InvoicesPage() {
                 </div>
                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                   <p className="text-base font-bold text-gray-900">{formatCurrency(inv.totalAmount)}</p>
-                  {inv.status === 'draft' && (
-                    <button onClick={() => handleMarkSent(inv)} className="btn-secondary text-xs px-2 py-1 gap-1">
-                      <Send size={11} /> Send
+                  <div className="flex items-center gap-1">
+                    {inv.status === 'draft' && (
+                      <button onClick={() => handleMarkSent(inv)} className="btn-secondary text-xs px-2 py-1 gap-1">
+                        <Send size={11} /> Send
+                      </button>
+                    )}
+                    {actionable && (
+                      <button onClick={() => setPayingInvoice(inv)} className="btn-primary text-xs px-2 py-1 gap-1">
+                        <CreditCard size={11} /> Pay
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDownloadPdf(inv)}
+                      className="p-1.5 rounded-lg hover:bg-brand-50 text-gray-400 hover:text-brand-700"
+                      title="Download PDF"
+                      aria-label={`Download ${inv.invoiceNumber} as PDF`}
+                    >
+                      <Download size={13} />
                     </button>
-                  )}
-                  {actionable && (
-                    <button onClick={() => setPayingInvoice(inv)} className="btn-primary text-xs px-2 py-1 gap-1">
-                      <CreditCard size={11} /> Pay
-                    </button>
-                  )}
+                  </div>
                 </div>
               </div>
             );

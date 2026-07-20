@@ -226,32 +226,15 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   // ── Auth listener ──────────────────────────────────────
   useEffect(() => {
     let mounted = true;
+    // Prevents the double initial load (getSession + the SIGNED_IN event)
+    // and periodic TOKEN_REFRESHED events from refetching all tenant data.
+    let loadedUserId: string | null = null;
 
-    const initSession = async () => {
-      const { data: { session: s } } = await supabase.auth.getSession();
-      if (!mounted) return;
-
-      setSession(s);
-      if (s?.user) {
-        setUser({
-          id: s.user.id,
-          name: s.user.user_metadata?.name || s.user.email || '',
-          email: s.user.email || '',
-          role: 'tenant',
-          createdAt: s.user.created_at,
-        });
-        await refreshData();
-      }
-      setAuthLoading(false);
-    };
-
-    initSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
-      if (!mounted) return;
+    const applySession = async (s: Session | null) => {
       setSession(s);
 
-      if (event === 'SIGNED_OUT' || !s?.user) {
+      if (!s?.user) {
+        loadedUserId = null;
         setUser(null);
         setTenantRecord(null);
         setActiveLease(null);
@@ -264,6 +247,9 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (s.user.id === loadedUserId) return; // same user — skip reload
+      loadedUserId = s.user.id;
+
       setUser({
         id: s.user.id,
         name: s.user.user_metadata?.name || s.user.email || '',
@@ -272,6 +258,20 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         createdAt: s.user.created_at,
       });
       await refreshData();
+    };
+
+    const initSession = async () => {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (!mounted) return;
+      await applySession(s);
+      setAuthLoading(false);
+    };
+
+    initSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, s) => {
+      if (!mounted) return;
+      await applySession(s);
     });
 
     return () => { mounted = false; subscription.unsubscribe(); };

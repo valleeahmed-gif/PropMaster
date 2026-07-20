@@ -110,8 +110,8 @@ export function PageLoader({ label = 'Loading…' }: { label?: string }) {
           style={{
             borderWidth: 3,
             borderStyle: 'solid',
-            borderColor: '#d2f3e5',
-            borderTopColor: '#0e7c64',
+            borderColor: '#c8ecda',
+            borderTopColor: '#007749',
           }}
           role="status"
           aria-label={label}
