@@ -95,9 +95,11 @@ export function Layout({ children }: LayoutProps) {
           className="flex-1 overflow-y-auto"
           tabIndex={-1}
         >
+          {/* pb-24 keeps the last content clear of the fixed mobile bottom nav —
+              main is an inner scroll container, so a spacer outside it can't. */}
           <div
             key={typeof window !== 'undefined' ? window.location.pathname : ''}
-            className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-8 page-enter"
+            className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-8 pb-24 lg:pb-8 page-enter"
           >
             {children}
           </div>

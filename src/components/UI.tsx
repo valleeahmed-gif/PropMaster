@@ -92,7 +92,7 @@ export function ToastContainer({ toasts: propToasts, dismissToast: propDismiss }
   };
 
   return (
-    <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-sm pointer-events-none">
+    <div className="fixed bottom-24 lg:bottom-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-[calc(100vw-2rem)] max-w-sm pointer-events-none">
       {toasts.map(t => (
         <div
           key={t.id}

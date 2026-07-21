@@ -6,7 +6,7 @@ import { Modal, EmptyState, PageHeader, StatusBadge, PriorityBadge, Field, Selec
 import { RecordPaymentModal } from '../components/RecordPaymentModal';
 import { UpdateMaintenanceModal } from '../components/UpdateMaintenanceModal';
 import { Tenant } from '../types';
-import { formatCurrency, formatDate, formatMonthYear, APP_URL } from '../utils';
+import { formatCurrency, formatCurrencyShort, formatDate, formatMonthYear, APP_URL } from '../utils';
 
 // ── Tenants Page ───────────────────────────────────────────
 // ── Edit Tenant Modal ──────────────────────────────────────
@@ -160,33 +160,72 @@ export function TenantsPage() {
             const lease = getTenantLease(tenant.id);
             const property = getTenantProperty(tenant.id);
             return (
-              <div key={tenant.id} className="flex items-center gap-4 px-4 py-4">
-                <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm font-bold text-brand-700">
-                    {tenant.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium text-gray-900 truncate">{tenant.name}</p>
-                    <StatusBadge status={tenant.inviteStatus} />
+              <div key={tenant.id} className="px-4 py-4">
+                {/* Identity row — contact details get the full width and
+                    truncate; rent sits on the right only where there's room */}
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-bold text-brand-700">
+                      {tenant.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
-                    <span className="flex items-center gap-1"><Mail size={10} />{tenant.email}</span>
-                    {tenant.phone && <span className="flex items-center gap-1"><Phone size={10} />{tenant.phone}</span>}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-gray-900 truncate">{tenant.name}</p>
+                      <StatusBadge status={tenant.inviteStatus} />
+                    </div>
+                    <p className="flex items-center gap-1.5 mt-1 text-xs text-gray-500 min-w-0">
+                      <Mail size={10} className="flex-shrink-0" />
+                      <span className="truncate">{tenant.email}</span>
+                    </p>
+                    {tenant.phone && (
+                      <p className="flex items-center gap-1.5 mt-0.5 text-xs text-gray-500">
+                        <Phone size={10} className="flex-shrink-0" />{tenant.phone}
+                      </p>
+                    )}
+                    {property && (
+                      <button
+                        onClick={() => navigate(`/properties/${property.id}`)}
+                        className="flex items-center gap-1 text-xs text-brand-600 mt-1 hover:underline max-w-full"
+                      >
+                        <Building2 size={10} className="flex-shrink-0" />
+                        <span className="truncate">{property.name}</span>
+                      </button>
+                    )}
                   </div>
-                  {property && (
-                    <button
-                      onClick={() => navigate(`/properties/${property.id}`)}
-                      className="flex items-center gap-1 text-xs text-brand-600 mt-1 hover:underline"
-                    >
-                      <Building2 size={10} />{property.name}
-                    </button>
+                  {lease && (
+                    <p className="hidden sm:block text-sm font-semibold text-gray-900 flex-shrink-0">
+                      {formatCurrency(lease.rentAmount)}/mo
+                    </p>
                   )}
                 </div>
-                <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                  {lease && <p className="text-sm font-semibold text-gray-900">{formatCurrency(lease.rentAmount)}/mo</p>}
-                  <div className="flex gap-1.5">
+
+                {/* Action row — rent (on mobile) and buttons never overlap
+                    the contact details above */}
+                <div className="flex items-center justify-between gap-2 mt-3 sm:mt-2 sm:justify-end">
+                  {lease ? (
+                    <p className="sm:hidden text-sm font-semibold text-gray-900">
+                      {formatCurrencyShort(lease.rentAmount)}/mo
+                    </p>
+                  ) : (
+                    <span className="sm:hidden" />
+                  )}
+                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                    {tenant.inviteStatus === 'pending' && (
+                      <button
+                        onClick={() => {
+                          const link = `${APP_URL}/app/accept-invite?tenant_id=${tenant.id}`;
+                          navigator.clipboard?.writeText(link);
+                          showToast('Invite link copied to clipboard');
+                        }}
+                        className="text-xs text-amber-600 font-medium hover:underline cursor-pointer"
+                      >
+                        Pending · copy link
+                      </button>
+                    )}
+                    {tenant.inviteStatus === 'accepted' && (
+                      <span className="text-xs text-green-600 font-medium">✓ Active</span>
+                    )}
                     {/* Edit button — always visible */}
                     <button
                       onClick={() => setEditingTenant(tenant)}
@@ -217,21 +256,6 @@ export function TenantsPage() {
                       >
                         <Mail size={11} /> Invite
                       </button>
-                    )}
-                    {tenant.inviteStatus === 'pending' && (
-                      <button
-                        onClick={() => {
-                          const link = `${APP_URL}/app/accept-invite?tenant_id=${tenant.id}`;
-                          navigator.clipboard?.writeText(link);
-                          showToast('Invite link copied to clipboard');
-                        }}
-                        className="text-xs text-amber-600 font-medium self-center hover:underline cursor-pointer"
-                      >
-                        Pending · copy link
-                      </button>
-                    )}
-                    {tenant.inviteStatus === 'accepted' && (
-                      <span className="text-xs text-green-600 font-medium self-center">✓ Active</span>
                     )}
                   </div>
                 </div>
