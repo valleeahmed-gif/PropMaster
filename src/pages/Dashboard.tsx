@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StatusBadge, PriorityBadge } from '../components/UI';
-import { formatCurrency, formatDate } from '../utils';
+import { formatCurrency, formatCurrencyShort, formatDate } from '../utils';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -24,12 +24,12 @@ export function DashboardPage() {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
-  const rentThisMonth = myPayments
-    .filter(p => {
-      const d = new Date(p.paymentDate);
-      return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear && p.status === 'verified';
-    })
-    .reduce((s, p) => s + p.amount, 0);
+  const monthPayments = myPayments.filter(p => {
+    const d = new Date(p.paymentDate);
+    return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear && p.status === 'verified';
+  });
+  const rentThisMonth = monthPayments.reduce((s, p) => s + p.amount, 0);
+  const paymentsThisMonth = monthPayments.length;
 
   const overdueInvoices = myInvoices.filter(i => i.status === 'overdue');
   const sentInvoices    = myInvoices.filter(i => i.status === 'sent' || i.status === 'partial');
@@ -103,8 +103,8 @@ export function DashboardPage() {
         />
         <StatTile
           label="Collected this month"
-          value={formatCurrency(rentThisMonth)}
-          sub={recentPayments.length > 0 ? `${recentPayments.length} payments` : 'No payments yet'}
+          value={formatCurrencyShort(rentThisMonth)}
+          sub={paymentsThisMonth > 0 ? `${paymentsThisMonth} ${paymentsThisMonth === 1 ? 'payment' : 'payments'} this month` : 'No payments yet'}
           icon={<TrendingUp size={18} />}
           iconBg="bg-brass-50 text-brass-700"
           highlight
@@ -112,7 +112,7 @@ export function DashboardPage() {
         />
         <StatTile
           label="Outstanding"
-          value={formatCurrency(totalOutstanding)}
+          value={formatCurrencyShort(totalOutstanding)}
           sub={overdueInvoices.length > 0 ? `${overdueInvoices.length} overdue` : `${sentInvoices.length} pending`}
           subTone={overdueInvoices.length > 0 ? 'red' : 'amber'}
           icon={<AlertCircle size={18} />}
@@ -287,7 +287,7 @@ function StatTile({ label, value, sub, subTone, icon, iconBg, highlight, onClick
         {icon}
       </div>
       <p className="text-2xs font-bold text-ink-500 uppercase tracking-widest mb-1">{label}</p>
-      <p className="text-xl sm:text-2xl font-bold text-ink-900 leading-none tabular truncate">{value}</p>
+      <p className="text-lg sm:text-2xl font-bold text-ink-900 leading-tight tabular whitespace-nowrap" title={value}>{value}</p>
       <p className={`text-xs font-medium mt-1.5 ${subColor}`}>{sub}</p>
     </button>
   );

@@ -310,7 +310,13 @@ export function PropertyDetailPage() {
   const propMaintenance = maintenanceRequests.filter(m => m.propertyId === id);
 
   const totalCollected = propPayments.filter(p => p.status === 'verified').reduce((s, p) => s + p.amount, 0);
-  const outstanding = propInvoices.filter(i => i.status === 'sent' || i.status === 'overdue').reduce((s, i) => s + i.totalAmount, 0);
+  // Outstanding = remaining balances on sent/partial/overdue invoices
+  const outstanding = propInvoices
+    .filter(i => i.status === 'sent' || i.status === 'overdue' || i.status === 'partial')
+    .reduce((s, i) => {
+      const paid = propPayments.filter(p => p.invoiceId === i.id && p.status === 'verified').reduce((ps, p) => ps + p.amount, 0);
+      return s + Math.max(i.totalAmount - paid, 0);
+    }, 0);
 
   const handleDelete = () => {
     deleteProperty(id!);
@@ -325,14 +331,15 @@ export function PropertyDetailPage() {
         <ArrowLeft size={16} /> Back to properties
       </button>
 
-      {/* Header Card */}
+      {/* Header Card — actions wrap below the title on narrow screens so the
+          name and address keep the full card width */}
       <div className="card p-5 mb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex items-start gap-4 min-w-0">
             <div className="w-12 h-12 rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0">
               <Building2 size={22} className="text-brand-600" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-lg font-bold text-gray-900">{property.name}</h1>
               <p className="text-sm text-gray-500 mt-0.5">
               {property.address}{property.unitNumber ? `, Unit ${property.unitNumber}` : ''}
@@ -360,11 +367,11 @@ export function PropertyDetailPage() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2 flex-shrink-0">
+          <div className="flex gap-2 flex-shrink-0 pl-16 sm:pl-0">
             <button onClick={() => setShowEdit(true)} className="btn-secondary px-3 py-2 gap-1.5 text-xs">
               <Edit2 size={14} /> Edit
             </button>
-            <button onClick={() => setShowDelete(true)} className="btn-danger px-3 py-2 gap-1.5 text-xs">
+            <button onClick={() => setShowDelete(true)} className="btn-danger px-3 py-2 gap-1.5 text-xs" aria-label="Delete property">
               <Trash2 size={14} />
             </button>
           </div>

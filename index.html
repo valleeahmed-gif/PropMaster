@@ -179,6 +179,8 @@
       border-radius: 20px; overflow: hidden;
       box-shadow: 0 32px 80px rgba(15,17,35,0.16);
       aspect-ratio: 4/3;
+      /* Branded gradient shows while the photo loads (or if it fails) */
+      background: linear-gradient(135deg, #007749 0%, #00603b 55%, #002317 100%);
     }
     .hero-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .hero-badge {
@@ -274,6 +276,7 @@
       border-radius: 20px; overflow: hidden;
       box-shadow: 0 24px 64px rgba(15,17,35,0.11);
       aspect-ratio: 16/10;
+      background: linear-gradient(135deg, #c8ecda 0%, #e9f7f0 50%, #fff8e8 100%);
     }
     .img-feature-visual img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .img-feature-content .feature-list {
@@ -357,8 +360,15 @@
     .divider { border: none; border-top: 1px solid var(--border); margin: 0; }
 
     /* ── Scroll animations ── */
-    .fade-up { opacity: 0; transform: translateY(22px); transition: opacity 0.6s ease, transform 0.6s ease; }
-    .fade-up.visible { opacity: 1; transform: translateY(0); }
+    /* Scroll-reveal is an enhancement: content only starts hidden once JS
+       has confirmed it's running (html.js), so nothing can be stuck
+       invisible without JS, and a timed fallback reveals stragglers. */
+    .fade-up { transition: opacity 0.6s ease, transform 0.6s ease; }
+    .js .fade-up { opacity: 0; transform: translateY(22px); }
+    .js .fade-up.visible { opacity: 1; transform: translateY(0); }
+    @media (prefers-reduced-motion: reduce) {
+      .js .fade-up { opacity: 1; transform: none; transition: none; }
+    }
     .fade-up-delay-1 { transition-delay: 0.1s; }
     .fade-up-delay-2 { transition-delay: 0.2s; }
     .fade-up-delay-3 { transition-delay: 0.3s; }
@@ -466,7 +476,7 @@
       </div>
       <div class="hero-visual">
         <div class="hero-img-wrap">
-          <img src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eu3F93Dt5gqd5JxPigXMJVdETK/hf_20260611_073855_8a8df6c3-34d3-48db-9cbf-90764f003461.png" alt="Modern South African apartment building" loading="eager" />
+          <img src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eu3F93Dt5gqd5JxPigXMJVdETK/hf_20260611_073855_8a8df6c3-34d3-48db-9cbf-90764f003461.png" alt="Modern South African apartment building" loading="eager" onerror="this.style.display='none'" />
         </div>
         <div class="hero-badge">
           <div class="hero-badge-icon">💰</div>
@@ -578,7 +588,7 @@
   <div class="container">
     <div class="img-feature fade-up">
       <div class="img-feature-visual">
-        <img src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eu3F93Dt5gqd5JxPigXMJVdETK/hf_20260611_073859_c3600fce-fe7e-4581-aaeb-1395e64515c8.png" alt="Modern South African interior living space" />
+        <img src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eu3F93Dt5gqd5JxPigXMJVdETK/hf_20260611_073859_c3600fce-fe7e-4581-aaeb-1395e64515c8.png" alt="Modern South African interior living space" loading="lazy" onerror="this.style.display='none'" />
       </div>
       <div class="img-feature-content">
         <div class="section-eyebrow">Running costs</div>
@@ -656,7 +666,7 @@
   <div class="container">
     <div class="img-feature reverse fade-up">
       <div class="img-feature-visual">
-        <img src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eu3F93Dt5gqd5JxPigXMJVdETK/hf_20260611_073903_af0498e1-04f4-4131-bd9f-0626737035b8.png" alt="Aerial view of South African residential estate" />
+        <img src="https://d8j0ntlcm91z4.cloudfront.net/user_3Eu3F93Dt5gqd5JxPigXMJVdETK/hf_20260611_073903_af0498e1-04f4-4131-bd9f-0626737035b8.png" alt="Aerial view of South African residential estate" loading="lazy" onerror="this.style.display='none'" />
       </div>
       <div class="img-feature-content">
         <div class="section-eyebrow">Reports and analytics</div>
@@ -764,11 +774,14 @@
 </footer>
 
 <script>
+  document.documentElement.classList.add('js');
   const observer = new IntersectionObserver(
     entries => entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); }),
     { threshold: 0.1, rootMargin: '0px 0px -40px 0px' }
   );
   document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+  // Safety net: never leave content hidden (slow devices, odd viewports).
+  setTimeout(() => document.querySelectorAll('.fade-up').forEach(el => el.classList.add('visible')), 1800);
 </script>
 </body>
 </html>

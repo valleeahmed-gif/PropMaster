@@ -7,7 +7,7 @@ import {
 import { useTenant } from './TenantContext';
 import { Modal, Field, Select, EmptyState } from '../components/UI';
 import { Skeleton } from '../components/Skeleton';
-import { formatCurrency, formatDate, formatMonthYear } from '../utils';
+import { formatCurrency, formatCurrencyShort, formatDate, formatMonthYear } from '../utils';
 import { Invoice } from '../types';
 
 // ── Shared micro-components ────────────────────────────────
@@ -154,7 +154,7 @@ export function TenantHomePage() {
       <div className="grid grid-cols-3 gap-3 stagger">
         <StatTile
           label="Monthly rent"
-          value={formatCurrency(activeLease.rentAmount)}
+          value={formatCurrencyShort(activeLease.rentAmount)}
           icon={<CreditCard size={15} />}
           bg="bg-brand-50"
           fg="text-brand-700"
@@ -254,7 +254,7 @@ function StatTile({ label, value, icon, bg, fg }: {
       <div className={`w-8 h-8 rounded-xl ${bg} ${fg} flex items-center justify-center mx-auto mb-2`}>
         {icon}
       </div>
-      <p className="text-base font-bold text-ink-900 leading-none tabular truncate" title={value}>
+      <p className="text-base font-bold text-ink-900 leading-tight tabular whitespace-nowrap" title={value}>
         {value}
       </p>
       <p className="text-2xs text-ink-400 mt-1.5 leading-tight font-medium">{label}</p>

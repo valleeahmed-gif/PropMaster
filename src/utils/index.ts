@@ -15,6 +15,11 @@ export function formatCurrency(amount: number): string {
   return `R ${amount.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Whole-rand format for tight spaces (stat tiles) — "R 12 850". */
+export function formatCurrencyShort(amount: number): string {
+  return `R ${Math.round(amount).toLocaleString('en-ZA', { maximumFractionDigits: 0 })}`;
+}
+
 export function formatDate(dateStr: string): string {
   if (!dateStr) return '—';
   const [y, m, d] = dateStr.split('-');
