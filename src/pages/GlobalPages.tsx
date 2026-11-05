@@ -6,7 +6,7 @@ import { Modal, EmptyState, PageHeader, StatusBadge, PriorityBadge, Field, Selec
 import { RecordPaymentModal } from '../components/RecordPaymentModal';
 import { UpdateMaintenanceModal } from '../components/UpdateMaintenanceModal';
 import { Tenant } from '../types';
-import { formatCurrency, formatDate, formatMonthYear, APP_URL } from '../utils';
+import { formatCurrency, formatDate, formatMonthYear, errorMessage, today } from '../utils';
 
 // ── Tenants Page ───────────────────────────────────────────
 // ── Edit Tenant Modal ──────────────────────────────────────
@@ -20,6 +20,7 @@ function EditTenantModal({ tenant, onClose }: { tenant: Tenant; onClose: () => v
     const e: Record<string, string> = {};
     if (!form.name.trim()) e.name = 'Name is required';
     if (!form.email.trim()) e.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -31,8 +32,8 @@ function EditTenantModal({ tenant, onClose }: { tenant: Tenant; onClose: () => v
       await updateTenant(tenant.id, { name: form.name.trim(), email: form.email.trim(), phone: form.phone.trim() });
       showToast(`${form.name.split(' ')[0]}'s details updated`);
       onClose();
-    } catch {
-      showToast('Failed to save — please try again', 'error');
+    } catch (err) {
+      showToast(`Failed to save: ${errorMessage(err)}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -103,6 +104,19 @@ export function TenantsPage() {
   const { tenants, leases, properties, inviteTenant, showToast, user } = useApp();
   const [search, setSearch] = useState('');
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [inviting, setInviting] = useState<string | null>(null);
+
+  const sendInvite = async (tenant: Tenant, resend = false) => {
+    setInviting(tenant.id);
+    try {
+      await inviteTenant(tenant.id);
+      showToast(`${resend ? 'Invite re-sent' : 'Invite email sent'} to ${tenant.email}`);
+    } catch (err) {
+      showToast(`Couldn't send invite: ${errorMessage(err)}`, 'error');
+    } finally {
+      setInviting(null);
+    }
+  };
 
   const myTenants = tenants.filter(t => t.ownerId === user?.id);
   const filtered = myTenants.filter(t =>
@@ -194,40 +208,15 @@ export function TenantsPage() {
                     >
                       <Edit2 size={11} /> Edit
                     </button>
-                    {tenant.inviteStatus === 'none' && (
+                    {tenant.inviteStatus !== 'accepted' && (
                       <button
-                        onClick={async (e) => {
-                          const btn = e.currentTarget;
-                          btn.disabled = true;
-                          btn.textContent = 'Sending…';
-                          try {
-                            await inviteTenant(tenant.id);
-                            showToast(`Invite email sent to ${tenant.email}`);
-                          } catch (err: any) {
-                            // Fallback: copy link if email fails
-                            const link = `${APP_URL}/app/accept-invite?tenant_id=${tenant.id}`;
-                            navigator.clipboard?.writeText(link);
-                            showToast('Could not send email — invite link copied instead', 'info');
-                          } finally {
-                            btn.disabled = false;
-                            btn.textContent = 'Invite';
-                          }
-                        }}
+                        onClick={() => sendInvite(tenant, tenant.inviteStatus === 'pending')}
+                        disabled={inviting === tenant.id}
                         className="btn-secondary text-xs px-2.5 py-1.5 gap-1"
+                        title={tenant.inviteStatus === 'pending' ? 'Invite pending — send the email again' : 'Email an invite to the tenant portal'}
                       >
-                        <Mail size={11} /> Invite
-                      </button>
-                    )}
-                    {tenant.inviteStatus === 'pending' && (
-                      <button
-                        onClick={() => {
-                          const link = `${APP_URL}/app/accept-invite?tenant_id=${tenant.id}`;
-                          navigator.clipboard?.writeText(link);
-                          showToast('Invite link copied to clipboard');
-                        }}
-                        className="text-xs text-amber-600 font-medium self-center hover:underline cursor-pointer"
-                      >
-                        Pending · copy link
+                        <Mail size={11} />
+                        {inviting === tenant.id ? 'Sending…' : tenant.inviteStatus === 'pending' ? 'Resend' : 'Invite'}
                       </button>
                     )}
                     {tenant.inviteStatus === 'accepted' && (
@@ -268,8 +257,12 @@ export function InvoicesPage() {
   ];
 
   const handleMarkSent = async (inv: any) => {
-    await updateInvoice(inv.id, { status: 'sent' });
-    showToast(`${inv.invoiceNumber} marked as sent`);
+    try {
+      await updateInvoice(inv.id, { status: inv.dueDate < today() ? 'overdue' : 'sent' });
+      showToast(`${inv.invoiceNumber} marked as sent`);
+    } catch (err) {
+      showToast(`Couldn't update invoice: ${errorMessage(err)}`, 'error');
+    }
   };
 
   const handleDownloadPdf = async (inv: any) => {
@@ -277,8 +270,12 @@ export function InvoicesPage() {
     const lease = leases.find(l => l.id === inv.leaseId) || null;
     const tenant = lease ? tenants.find(t => t.id === lease.tenantId) || null : null;
     const invPayments = payments.filter(p => p.invoiceId === inv.id && p.status === 'verified');
-    const { downloadInvoicePdf } = await import('../utils/pdf');
-    downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments });
+    try {
+      const { downloadInvoicePdf } = await import('../utils/pdf');
+      downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments });
+    } catch (err) {
+      showToast(`Couldn't generate PDF: ${errorMessage(err)}`, 'error');
+    }
   };
 
   return (
@@ -308,7 +305,8 @@ export function InvoicesPage() {
         <div className="card divide-y divide-surface-100">
           {filtered.map(inv => {
             const prop = properties.find(p => p.id === inv.propertyId);
-            const actionable = inv.status === 'sent' || inv.status === 'overdue' || inv.status === 'draft';
+            const actionable = inv.status === 'sent' || inv.status === 'overdue' || inv.status === 'partial' || inv.status === 'draft';
+            const paid = payments.filter(p => p.invoiceId === inv.id && p.status === 'verified').reduce((s, p) => s + p.amount, 0);
             return (
               <div key={inv.id} className="flex items-center gap-3 px-4 py-4">
                 <div className="w-9 h-9 rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0">
@@ -324,6 +322,9 @@ export function InvoicesPage() {
                 </div>
                 <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                   <p className="text-base font-bold text-gray-900">{formatCurrency(inv.totalAmount)}</p>
+                  {paid > 0 && inv.status !== 'paid' && (
+                    <p className="text-xs text-amber-700 font-medium">{formatCurrency(Math.max(inv.totalAmount - paid, 0))} due</p>
+                  )}
                   <div className="flex items-center gap-1">
                     {inv.status === 'draft' && (
                       <button onClick={() => handleMarkSent(inv)} className="btn-secondary text-xs px-2 py-1 gap-1">
@@ -386,7 +387,7 @@ export function PaymentsPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{prop?.name}</p>
-                  <p className="text-xs text-gray-500">{formatDate(pay.paymentDate)} · {pay.method.toUpperCase()}</p>
+                  <p className="text-xs text-gray-500">{formatDate(pay.paymentDate)} · {pay.method.replace('_', ' ').toUpperCase()}</p>
                   {pay.notes && <p className="text-xs text-gray-400 mt-0.5">{pay.notes}</p>}
                 </div>
                 <div className="text-right flex-shrink-0">

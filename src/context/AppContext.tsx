@@ -1,11 +1,11 @@
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from 'react';
 import { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import {
   User, Property, Tenant, Lease, PropertyCost, UtilityBreakdown,
   Invoice, Payment, MaintenanceRequest, StatementUpload, Toast
 } from '../types';
-import { generateId, today, APP_URL } from '../utils';
+import { generateId, today, APP_URL, deriveInvoiceStatus, errorMessage } from '../utils';
 
 interface AppState {
   user: User | null;
@@ -120,7 +120,8 @@ const mapUtilityBreakdown = (r: any): UtilityBreakdown => ({
 const mapInvoice = (r: any): Invoice => ({
   id: r.id, propertyId: r.property_id, leaseId: r.lease_id, ownerId: r.owner_id,
   invoiceNumber: r.invoice_number, month: r.month, year: r.year, dueDate: r.due_date,
-  lineItems: r.line_items, totalAmount: r.total_amount, status: r.status, createdAt: r.created_at,
+  lineItems: Array.isArray(r.line_items) ? r.line_items : [],
+  totalAmount: Number(r.total_amount) || 0, status: r.status, createdAt: r.created_at,
 });
 const mapPayment = (r: any): Payment => ({
   id: r.id, propertyId: r.property_id, leaseId: r.lease_id, invoiceId: r.invoice_id,
@@ -167,88 +168,82 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  // Latest invoices for callbacks that run after awaits (avoids stale closures).
+  const invoicesRef = useRef<Invoice[]>([]);
+  useEffect(() => { invoicesRef.current = invoices; }, [invoices]);
+
   // ── Load all data for logged-in user ──────────────────────
   const refreshData = useCallback(async () => {
     const { data: { user: sbUser } } = await supabase.auth.getUser();
     if (!sbUser) return;
     setDataLoading(true);
     try {
-      const [
-        { data: props }, { data: tens }, { data: leas }, { data: costs },
-        { data: bds }, { data: invs }, { data: pays }, { data: maint }, { data: stmts }
-      ] = await Promise.all([
+      const results = await Promise.all([
         supabase.from('properties').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
         supabase.from('tenants').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
         supabase.from('leases').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
         supabase.from('property_costs').select('*').eq('owner_id', sbUser.id).order('year', { ascending: false }),
-        supabase.from('utility_breakdowns').select('*'),
+        // RLS limits breakdowns to the caller's own property_costs.
+        supabase.from('utility_breakdowns').select('*').order('created_at', { ascending: true }),
         supabase.from('invoices').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
         supabase.from('payments').select('*').eq('owner_id', sbUser.id).order('payment_date', { ascending: false }),
         supabase.from('maintenance_requests').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
         supabase.from('statement_uploads').select('*').eq('owner_id', sbUser.id).order('uploaded_at', { ascending: false }),
       ]);
-      if (props) setProperties(props.map(mapProperty));
-      if (tens) setTenants(tens.map(mapTenant));
-      if (leas) setLeases(leas.map(mapLease));
-      if (costs) setPropertyCosts(costs.map(mapPropertyCost));
-      if (bds) setUtilityBreakdowns(bds.map(mapUtilityBreakdown));
-      if (pays) setPayments(pays.map(mapPayment));
-      if (maint) setMaintenanceRequests(maint.map(mapMaintenance));
-      if (stmts) setStatementUploads(stmts.map(mapStatementUpload));
+      const failed = results.find(r => r.error);
+      if (failed?.error) throw failed.error;
+      const [
+        { data: props }, { data: tens }, { data: leas }, { data: costs },
+        { data: bds }, { data: invs }, { data: pays }, { data: maint }, { data: stmts },
+      ] = results;
 
-      // ── Auto-detect overdue and partial statuses ───────────
-      if (invs && pays) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+      setProperties((props || []).map(mapProperty));
+      setTenants((tens || []).map(mapTenant));
+      setLeases((leas || []).map(mapLease));
+      setPropertyCosts((costs || []).map(mapPropertyCost));
+      setUtilityBreakdowns((bds || []).map(mapUtilityBreakdown));
+      const mappedPays = (pays || []).map(mapPayment);
+      setPayments(mappedPays);
+      setMaintenanceRequests((maint || []).map(mapMaintenance));
+      setStatementUploads((stmts || []).map(mapStatementUpload));
 
-        // Build a map of totalPaid per invoice from verified payments
-        const paidMap: Record<string, number> = {};
-        pays.filter((p: any) => p.status === 'verified' && p.invoice_id).forEach((p: any) => {
-          paidMap[p.invoice_id] = (paidMap[p.invoice_id] || 0) + p.amount;
-        });
-
-        const overdueIds: string[] = [];
-        const partialIds: string[] = [];
-
-        const mappedInvs = invs.map((r: any) => {
-          const inv = mapInvoice(r);
-          const totalPaid = paidMap[inv.id] || 0;
-
-          // Already fully paid — status stays paid regardless of date
-          if (inv.status === 'paid') return inv;
-
-          // Has partial payments
-          if (totalPaid > 0 && totalPaid < inv.totalAmount) {
-            if (inv.status !== 'partial') partialIds.push(inv.id);
-            return { ...inv, status: 'partial' as const };
-          }
-
-          // Past due date and still unpaid — mark overdue
-          if ((inv.status === 'sent' || inv.status === 'partial') && inv.dueDate) {
-            const due = new Date(inv.dueDate);
-            due.setHours(0, 0, 0, 0);
-            if (due < today) {
-              overdueIds.push(inv.id);
-              return { ...inv, status: 'overdue' as const };
-            }
-          }
-
-          return inv;
-        });
-
-        setInvoices(mappedInvs);
-
-        // Write status changes back to Supabase in the background
-        if (overdueIds.length > 0) {
-          supabase.from('invoices').update({ status: 'overdue' }).in('id', overdueIds).then(() => {});
+      // ── Reconcile invoice statuses (paid / partial / overdue) ──
+      const paidMap: Record<string, number> = {};
+      mappedPays.filter(p => p.status === 'verified' && p.invoiceId).forEach(p => {
+        paidMap[p.invoiceId!] = (paidMap[p.invoiceId!] || 0) + p.amount;
+      });
+      const changes: Record<string, string[]> = {};
+      const mappedInvs = (invs || []).map((r: any) => {
+        const inv = mapInvoice(r);
+        const next = deriveInvoiceStatus(inv.status, inv.totalAmount, paidMap[inv.id] || 0, inv.dueDate) as Invoice['status'];
+        if (next !== inv.status) {
+          (changes[next] ||= []).push(inv.id);
+          return { ...inv, status: next };
         }
-        if (partialIds.length > 0) {
-          supabase.from('invoices').update({ status: 'partial' }).in('id', partialIds).then(() => {});
-        }
-      }
+        return inv;
+      });
+      setInvoices(mappedInvs);
+
+      // Persist status changes so the tenant portal and reports agree.
+      await Promise.all(Object.entries(changes).map(([status, ids]) =>
+        supabase.from('invoices').update({ status }).in('id', ids)
+          .then(({ error }) => { if (error) console.error('Invoice status sync failed:', error); })
+      ));
+    } catch (err) {
+      console.error('Data load failed:', err);
+      showToast(`Couldn't load your data: ${errorMessage(err)}`, 'error');
     } finally {
       setDataLoading(false);
     }
+  }, [showToast]);
+
+  // Re-read a running-cost total after its breakdowns change. The database
+  // keeps total_amount in sync (trigger), so it is the source of truth.
+  const syncCostTotal = useCallback(async (costId: string) => {
+    const { data, error } = await supabase.from('property_costs').select('total_amount').eq('id', costId).maybeSingle();
+    if (error || !data) return;
+    const total = Number(data.total_amount) || 0;
+    setPropertyCosts(prev => prev.map(c => c.id === costId ? { ...c, totalAmount: total } : c));
   }, []);
 
   // ── Detect role from DB ───────────────────────────────────
@@ -384,8 +379,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLeases(prev => prev.filter(l => l.propertyId !== id));
     setInvoices(prev => prev.filter(i => i.propertyId !== id));
     setPayments(prev => prev.filter(p => p.propertyId !== id));
-    setPropertyCosts(prev => prev.filter(c => c.propertyId !== id));
+    setPropertyCosts(prev => {
+      const removed = new Set(prev.filter(c => c.propertyId === id).map(c => c.id));
+      setUtilityBreakdowns(bds => bds.filter(b => !removed.has(b.propertyCostId)));
+      return prev.filter(c => c.propertyId !== id);
+    });
     setMaintenanceRequests(prev => prev.filter(m => m.propertyId !== id));
+    setStatementUploads(prev => prev.filter(u => u.propertyId !== id));
   }, []);
 
   // ── Tenants ───────────────────────────────────────────────
@@ -457,9 +457,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     if (error) throw error;
 
-    await supabase.from('tenants')
+    const { error: statusErr } = await supabase.from('tenants')
       .update({ invite_status: 'pending' })
-      .eq('id', tenantId);
+      .eq('id', tenantId)
+      .neq('invite_status', 'accepted');
+    if (statusErr) console.error('Invite status update failed:', statusErr);
 
     setTenants(prev =>
       prev.map(t => t.id === tenantId ? { ...t, inviteStatus: 'pending' as const } : t)
@@ -553,13 +555,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
     const b = mapUtilityBreakdown(row);
     setUtilityBreakdowns(prev => [...prev, b]);
-    // Recalculate total
-    const allBds = [...utilityBreakdowns.filter(x => x.propertyCostId === data.propertyCostId), b];
-    const newTotal = allBds.reduce((s, x) => s + x.amount, 0);
-    await supabase.from('property_costs').update({ total_amount: newTotal }).eq('id', data.propertyCostId);
-    setPropertyCosts(prev => prev.map(c => c.id === data.propertyCostId ? { ...c, totalAmount: newTotal } : c));
+    await syncCostTotal(data.propertyCostId);
     return b;
-  }, [utilityBreakdowns]);
+  }, [syncCostTotal]);
 
   const updateUtilityBreakdown = useCallback(async (id: string, data: Partial<UtilityBreakdown>) => {
     const update: any = {};
@@ -567,32 +565,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.amount !== undefined) update.amount = data.amount;
     if (data.isRecoverable !== undefined) update.is_recoverable = data.isRecoverable;
     if (data.isRecurring !== undefined) update.is_recurring = data.isRecurring;
-    const { error } = await supabase.from('utility_breakdowns').update(update).eq('id', id);
+    const { data: row, error } = await supabase.from('utility_breakdowns').update(update).eq('id', id).select().single();
     if (error) throw error;
-    setUtilityBreakdowns(prev => {
-      const updated = prev.map(b => b.id === id ? { ...b, ...data } : b);
-      const changed = updated.find(b => b.id === id)!;
-      const newTotal = updated.filter(b => b.propertyCostId === changed.propertyCostId).reduce((s, b) => s + b.amount, 0);
-      supabase.from('property_costs').update({ total_amount: newTotal }).eq('id', changed.propertyCostId);
-      setPropertyCosts(costs => costs.map(c => c.id === changed.propertyCostId ? { ...c, totalAmount: newTotal } : c));
-      return updated;
-    });
-  }, []);
+    const b = mapUtilityBreakdown(row);
+    setUtilityBreakdowns(prev => prev.map(x => x.id === id ? b : x));
+    if (data.amount !== undefined) await syncCostTotal(b.propertyCostId);
+  }, [syncCostTotal]);
 
   const deleteUtilityBreakdown = useCallback(async (id: string) => {
-    const bd = utilityBreakdowns.find(b => b.id === id);
-    const { error } = await supabase.from('utility_breakdowns').delete().eq('id', id);
+    const { data: row, error } = await supabase.from('utility_breakdowns').delete().eq('id', id).select('property_cost_id').maybeSingle();
     if (error) throw error;
-    setUtilityBreakdowns(prev => {
-      const updated = prev.filter(b => b.id !== id);
-      if (bd) {
-        const newTotal = updated.filter(b => b.propertyCostId === bd.propertyCostId).reduce((s, b) => s + b.amount, 0);
-        supabase.from('property_costs').update({ total_amount: newTotal }).eq('id', bd.propertyCostId);
-        setPropertyCosts(costs => costs.map(c => c.id === bd.propertyCostId ? { ...c, totalAmount: newTotal } : c));
-      }
-      return updated;
-    });
-  }, [utilityBreakdowns]);
+    setUtilityBreakdowns(prev => prev.filter(b => b.id !== id));
+    if (row?.property_cost_id) await syncCostTotal(row.property_cost_id);
+  }, [syncCostTotal]);
 
   // ── Invoices ──────────────────────────────────────────────
   const addInvoice = useCallback(async (data: Omit<Invoice, 'id' | 'ownerId' | 'createdAt' | 'invoiceNumber'>): Promise<Invoice> => {
@@ -609,7 +594,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: row, error } = await supabase.from('invoices').insert({
       property_id: data.propertyId, lease_id: data.leaseId, owner_id: user!.id,
       invoice_number: invoiceNumber, month: data.month, year: data.year,
-      due_date: data.dueDate, invoice_date: data.dueDate, line_items: data.lineItems,
+      due_date: data.dueDate, invoice_date: today(), line_items: data.lineItems,
       total_amount: data.totalAmount, status: data.status,
     }).select().single();
     if (error) throw error;
@@ -647,37 +632,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const p = mapPayment(row);
     setPayments(prev => [p, ...prev]);
 
-    // ── Smart invoice status after payment ─────────────────
+    // ── Re-derive the linked invoice's status ──────────────
     if (data.invoiceId) {
-      // Get all payments for this invoice after insert
-      const { data: invPayments } = await supabase
+      const { data: invPayments, error: payErr } = await supabase
         .from('payments')
         .select('amount')
         .eq('invoice_id', data.invoiceId)
         .eq('status', 'verified');
-
-      const totalPaid = (invPayments || []).reduce((s: number, p: any) => s + p.amount, 0);
-      const inv = invoices.find(i => i.id === data.invoiceId);
-
-      if (inv) {
-        let newStatus: Invoice['status'];
-        if (totalPaid >= inv.totalAmount) {
-          newStatus = 'paid';
-        } else {
-          // Partial — keep overdue if already past due date
-          const due = new Date(inv.dueDate);
-          due.setHours(0, 0, 0, 0);
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          newStatus = due < today ? 'overdue' : 'partial';
+      const inv = invoicesRef.current.find(i => i.id === data.invoiceId);
+      if (!payErr && inv) {
+        const totalPaid = (invPayments || []).reduce((s: number, x: any) => s + Number(x.amount), 0);
+        // Recording a payment against a draft implicitly issues it.
+        const base = inv.status === 'draft' ? 'sent' : inv.status;
+        const newStatus = deriveInvoiceStatus(base, inv.totalAmount, totalPaid, inv.dueDate) as Invoice['status'];
+        if (newStatus !== inv.status) {
+          const { error: upErr } = await supabase.from('invoices').update({ status: newStatus }).eq('id', data.invoiceId);
+          if (!upErr) setInvoices(prev => prev.map(i => i.id === data.invoiceId ? { ...i, status: newStatus } : i));
         }
-        await supabase.from('invoices').update({ status: newStatus }).eq('id', data.invoiceId);
-        setInvoices(prev => prev.map(i => i.id === data.invoiceId ? { ...i, status: newStatus } : i));
       }
     }
 
     return p;
-  }, [user, invoices]);
+  }, [user]);
 
   // ── Maintenance ───────────────────────────────────────────
   const addMaintenanceRequest = useCallback(async (data: Omit<MaintenanceRequest, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>): Promise<MaintenanceRequest> => {

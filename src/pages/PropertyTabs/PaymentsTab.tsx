@@ -3,89 +3,15 @@ import React, { useState } from 'react';
 import { Plus, CreditCard, Trash2, Upload, CheckCircle, AlertCircle, FileText, RotateCcw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Modal, EmptyState, StatusBadge, Field, Select, Toggle, FileUpload, Spinner } from '../../components/UI';
-import { formatCurrency, formatDate, formatMonthYear, MONTHS } from '../../utils';
+import { formatCurrency, formatDate, formatMonthYear, MONTHS, errorMessage } from '../../utils';
 import { UtilityBreakdown, MaintenanceRequest } from '../../types';
 import { supabase } from '../../lib/supabase';
+
+const MAX_STATEMENT_BYTES = 10 * 1024 * 1024; // must match the edge function limit
 import { UpdateMaintenanceModal } from '../../components/UpdateMaintenanceModal';
 
 // ── Payments Tab ───────────────────────────────────────────
 interface Props { propertyId: string; }
-
-function PaymentModal({ open, onClose, propertyId }: { open: boolean; onClose: () => void; propertyId: string }) {
-  const { addPayment, leases, invoices, showToast } = useApp();
-  const [form, setForm] = useState({ amount: '', paymentDate: '', method: 'eft', invoiceId: '', notes: '' });
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  const activeLease = leases.find(l => l.propertyId === propertyId && l.status === 'active');
-  const unpaidInvoices = invoices.filter(i => i.propertyId === propertyId && (i.status === 'sent' || i.status === 'overdue'));
-
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (!form.amount || Number(form.amount) <= 0) e.amount = 'Enter a valid amount';
-    if (!form.paymentDate) e.paymentDate = 'Payment date required';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
-
-  const handleSave = () => {
-    if (!validate() || !activeLease) return;
-    addPayment({
-      propertyId,
-      leaseId: activeLease.id,
-      invoiceId: form.invoiceId || undefined,
-      amount: Number(form.amount),
-      paymentDate: form.paymentDate,
-      method: form.method as any,
-      status: 'verified',
-      notes: form.notes || undefined,
-    });
-    showToast('Payment recorded');
-    onClose();
-    setForm({ amount: '', paymentDate: '', method: 'eft', invoiceId: '', notes: '' });
-  };
-
-  return (
-    <Modal open={open} onClose={onClose} title="Record payment">
-      <div className="p-6 space-y-4">
-        <Field label="Amount (ZAR)" required error={errors.amount}>
-          <div className="relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R</span>
-            <input className="input pl-7" type="number" inputMode="decimal" placeholder="12 500" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
-          </div>
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Payment date" required error={errors.paymentDate}>
-            <input className="input" type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))} />
-          </Field>
-          <Field label="Payment method">
-            <Select
-              value={form.method}
-              onChange={e => setForm(f => ({ ...f, method: e.target.value }))}
-              options={[{ value: 'bank_transfer', label: 'EFT / Bank Transfer' }, { value: 'cash', label: 'Cash' }, { value: 'payfast', label: 'PayFast' }, { value: 'other', label: 'Other' }]}
-            />
-          </Field>
-        </div>
-        {unpaidInvoices.length > 0 && (
-          <Field label="Link to invoice">
-            <Select
-              value={form.invoiceId}
-              onChange={e => setForm(f => ({ ...f, invoiceId: e.target.value }))}
-              placeholder="Select invoice (optional)"
-              options={unpaidInvoices.map(i => ({ value: i.id, label: `${i.invoiceNumber} — ${formatCurrency(i.totalAmount)}` }))}
-            />
-          </Field>
-        )}
-        <Field label="Notes">
-          <input className="input" placeholder="Optional note" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-        </Field>
-        <div className="flex gap-3 pt-2">
-          <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-          <button onClick={handleSave} className="btn-primary flex-1 justify-center">Record payment</button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 export function PaymentsTab({ propertyId }: Props) {
   const { payments, invoices } = useApp();
@@ -168,7 +94,7 @@ function BreakdownRow({ bd, onUpdate, onDelete }: {
   const [amount, setAmount] = useState(String(bd.amount));
 
   const save = () => {
-    if (!label.trim() || Number(amount) <= 0) return;
+    if (!label.trim() || !(Number(amount) > 0)) return;
     onUpdate(bd.id, { label: label.trim(), amount: Number(amount) });
     setEditing(false);
   };
@@ -188,8 +114,8 @@ function BreakdownRow({ bd, onUpdate, onDelete }: {
             <CheckCircle size={15} />
           </button>
           <button onClick={() => { setEditing(false); setLabel(bd.label); setAmount(String(bd.amount)); }}
-            className="p-1.5 rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 flex-shrink-0">
-            <AlertCircle size={15} />
+            className="p-1.5 rounded-lg bg-gray-50 text-gray-400 hover:bg-gray-100 flex-shrink-0 text-xs" aria-label="Cancel edit">
+            Cancel
           </button>
         </>
       ) : (
@@ -211,7 +137,7 @@ function BreakdownRow({ bd, onUpdate, onDelete }: {
           </div>
           <span className="text-sm font-semibold text-gray-900 flex-shrink-0 w-24 text-right">{formatCurrency(bd.amount)}</span>
           {/* Recoverable toggle */}
-          <Toggle checked={bd.isRecoverable} onChange={v => onUpdate(bd.id, { isRecoverable: v })} />
+          <Toggle checked={bd.isRecoverable} onChange={v => onUpdate(bd.id, { isRecoverable: v })} label={undefined} />
           {/* Recurring toggle */}
           <button
             onClick={() => onUpdate(bd.id, { isRecurring: !bd.isRecurring })}
@@ -227,7 +153,7 @@ function BreakdownRow({ bd, onUpdate, onDelete }: {
           <button onClick={() => setEditing(true)} className="p-1.5 rounded-lg hover:bg-surface-100 text-gray-400 hover:text-gray-600 flex-shrink-0 text-xs">
             Edit
           </button>
-          <button onClick={() => onDelete(bd.id)} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 flex-shrink-0">
+          <button onClick={() => onDelete(bd.id)} aria-label={`Delete ${bd.label}`} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 flex-shrink-0">
             <Trash2 size={13} />
           </button>
         </>
@@ -259,6 +185,7 @@ export function CostsTab({ propertyId }: Props) {
   const [showExtractModal, setShowExtractModal] = useState(false);
   const [lastFileName, setLastFileName] = useState('');
   const [autoPopulating, setAutoPopulating] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const cost = propertyCosts.find(c => c.propertyId === propertyId && c.month === month && c.year === year);
   const breakdowns = cost ? utilityBreakdowns.filter(b => b.propertyCostId === cost.id) : [];
@@ -291,18 +218,25 @@ export function CostsTab({ propertyId }: Props) {
     }
 
     setAutoPopulating(true);
-    const c = await ensureCost();
-    for (const item of recurringItems) {
-      await addUtilityBreakdown({
-        propertyCostId: c.id,
-        label: item.label,
-        amount: item.amount,
-        isRecoverable: item.isRecoverable,
-        isRecurring: true,
-      });
+    let added = 0;
+    try {
+      const c = await ensureCost();
+      for (const item of recurringItems) {
+        await addUtilityBreakdown({
+          propertyCostId: c.id,
+          label: item.label,
+          amount: item.amount,
+          isRecoverable: item.isRecoverable,
+          isRecurring: true,
+        });
+        added++;
+      }
+      showToast(`${added} recurring item${added !== 1 ? 's' : ''} added`);
+    } catch (err) {
+      showToast(`Added ${added} of ${recurringItems.length} items — ${errorMessage(err)}`, 'error');
+    } finally {
+      setAutoPopulating(false);
     }
-    setAutoPopulating(false);
-    showToast(`${recurringItems.length} recurring item${recurringItems.length !== 1 ? 's' : ''} added`);
   };
 
   // Check if this month already has items, and if previous month has recurring items
@@ -318,7 +252,7 @@ export function CostsTab({ propertyId }: Props) {
   const handleAddLine = async () => {
     const labelTrimmed = newLabel.trim();
     const amountNum = Number(newAmount);
-    if (!labelTrimmed || !newAmount || amountNum <= 0) {
+    if (!labelTrimmed || !newAmount || !(amountNum > 0)) {
       showToast('Please enter a label and a valid amount', 'error');
       return;
     }
@@ -328,7 +262,7 @@ export function CostsTab({ propertyId }: Props) {
       await addUtilityBreakdown({
         propertyCostId: c.id,
         label: labelTrimmed,
-        amount: amountNum,
+        amount: Math.round(amountNum * 100) / 100,
         isRecoverable: newRecoverable,
         isRecurring: newRecurring,
       });
@@ -337,7 +271,7 @@ export function CostsTab({ propertyId }: Props) {
       setNewRecurring(false);
       showToast(`${labelTrimmed} added${newRecurring ? ' — will repeat monthly' : ''}`);
     } catch (err) {
-      showToast('Failed to save — please try again', 'error');
+      showToast(`Failed to save: ${errorMessage(err)}`, 'error');
     } finally {
       setAdding(false);
     }
@@ -353,63 +287,89 @@ export function CostsTab({ propertyId }: Props) {
   ];
 
   const handleFileUpload = async (file: File) => {
-    setExtracting(true);
     setExtractError(null);
+    if (file.type && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      setExtractError('Please upload a PDF statement.');
+      return;
+    }
+    if (file.size > MAX_STATEMENT_BYTES) {
+      setExtractError('That PDF is larger than 10 MB. Try a smaller export of the statement.');
+      return;
+    }
+    setExtracting(true);
     setLastFileName(file.name);
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onload = () => resolve((reader.result as string).split(',')[1] || '');
         reader.onerror = () => reject(new Error('Failed to read file'));
         reader.readAsDataURL(file);
       });
+      const safeName = file.name.replace(/[^\w.\- ]+/g, '_').slice(0, 120);
       const uploadRecord = await addStatementUpload({
         propertyId,
-        filePath: `statements/${propertyId}/${Date.now()}-${file.name}`,
-        fileName: file.name,
+        filePath: `statements/${propertyId}/${Date.now()}-${safeName}`,
+        fileName: safeName,
       });
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Not authenticated');
-      const response = await fetch(
-        'https://cghiodbvbggizghxuvna.supabase.co/functions/v1/extract-statement',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-          body: JSON.stringify({ fileBase64: base64, fileName: file.name, propertyId, uploadId: uploadRecord.id }),
-        }
-      );
-      const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || 'Extraction failed');
-      if (result.items.length === 0) {
-        setExtractError('No line items found. Try a different statement or add manually.');
-        setExtracting(false);
+      const { data: result, error } = await supabase.functions.invoke('extract-statement', {
+        body: { fileBase64: base64, fileName: safeName, propertyId, uploadId: uploadRecord.id },
+      });
+      if (error) {
+        // Non-2xx: the function returns { error } with a user-safe message.
+        let msg = 'Extraction failed. Please try again or add the items manually.';
+        try {
+          const ctx = (error as any).context;
+          const body = ctx && typeof ctx.json === 'function' ? await ctx.json() : null;
+          if (body?.error) msg = body.error;
+        } catch { /* keep default */ }
+        throw new Error(msg);
+      }
+      if (!result?.success) throw new Error(result?.error || 'Extraction failed');
+      const items = (result.items || []).filter((i: any) => i && i.label && Number(i.amount) > 0);
+      if (items.length === 0) {
+        setExtractError('No line items found. Try a different statement or add the items manually.');
         return;
       }
-      setExtractedItems(result.items.map((item: any) => ({ ...item, selected: true })));
-      setExtracting(false);
+      setExtractedItems(items.map((item: any) => ({ ...item, amount: Number(item.amount), selected: true })));
       setShowExtractModal(true);
-      showToast(`${result.items.length} items extracted — please review`);
+      showToast(`${items.length} items extracted — please review`);
     } catch (err) {
       setExtractError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } finally {
       setExtracting(false);
     }
   };
 
   const confirmExtraction = async () => {
-    const c = await ensureCost();
+    if (confirming) return;
     const selected = extractedItems.filter(i => i.selected);
-    for (const item of selected) {
-      await addUtilityBreakdown({
-        propertyCostId: c.id,
-        label: item.label,
-        amount: item.amount,
-        isRecoverable: item.is_recoverable,
-        isRecurring: false,
+    setConfirming(true);
+    let added = 0;
+    try {
+      const c = await ensureCost();
+      for (const item of selected) {
+        await addUtilityBreakdown({
+          propertyCostId: c.id,
+          label: item.label,
+          amount: item.amount,
+          isRecoverable: item.is_recoverable,
+          isRecurring: false,
+        });
+        added++;
+      }
+      setShowExtractModal(false);
+      setExtractedItems([]);
+      showToast(`${added} items added from statement`);
+    } catch (err) {
+      // Drop the ones that made it in so a retry doesn't duplicate them.
+      setExtractedItems(prev => {
+        let skip = added;
+        return prev.filter(i => !(i.selected && skip-- > 0));
       });
+      showToast(`Added ${added} of ${selected.length} items — ${errorMessage(err)}`, 'error');
+    } finally {
+      setConfirming(false);
     }
-    setShowExtractModal(false);
-    setExtractedItems([]);
-    showToast(`${selected.length} items added from statement`);
   };
 
   return (
@@ -508,8 +468,14 @@ export function CostsTab({ propertyId }: Props) {
           <BreakdownRow
             key={bd.id}
             bd={bd}
-            onUpdate={updateUtilityBreakdown}
-            onDelete={(id) => { deleteUtilityBreakdown(id); showToast('Item removed'); }}
+            onUpdate={async (id, d) => {
+              try { await updateUtilityBreakdown(id, d); }
+              catch (err) { showToast(`Couldn't update item: ${errorMessage(err)}`, 'error'); }
+            }}
+            onDelete={async (id) => {
+              try { await deleteUtilityBreakdown(id); showToast('Item removed'); }
+              catch (err) { showToast(`Couldn't remove item: ${errorMessage(err)}`, 'error'); }
+            }}
           />
         ))}
 
@@ -624,7 +590,7 @@ export function CostsTab({ propertyId }: Props) {
       </div>
 
       {/* Extraction review modal */}
-      <Modal open={showExtractModal} onClose={() => setShowExtractModal(false)} title="Review extracted items" size="md">
+      <Modal open={showExtractModal} onClose={() => { if (!confirming) setShowExtractModal(false); }} title="Review extracted items" size="md">
         <div className="p-6 space-y-4">
           <div className="flex items-start gap-3 p-3.5 bg-brand-50 rounded-xl border border-brand-100">
             <FileText size={16} className="text-brand-600 flex-shrink-0 mt-0.5" />
@@ -677,8 +643,8 @@ export function CostsTab({ propertyId }: Props) {
           )}
           <div className="flex gap-3 pt-2">
             <button onClick={() => { setShowExtractModal(false); setExtractedItems([]); }} className="btn-secondary flex-1 justify-center">Cancel</button>
-            <button onClick={confirmExtraction} disabled={!extractedItems.some(i => i.selected)} className="btn-primary flex-1 justify-center">
-              <CheckCircle size={15} /> Add {extractedItems.filter(i => i.selected).length} items
+            <button onClick={confirmExtraction} disabled={confirming || !extractedItems.some(i => i.selected)} className="btn-primary flex-1 justify-center">
+              <CheckCircle size={15} /> {confirming ? 'Adding…' : `Add ${extractedItems.filter(i => i.selected).length} items`}
             </button>
           </div>
         </div>
@@ -698,20 +664,28 @@ export function MaintenanceTab({ propertyId }: Props) {
   const activeLease = leases.find(l => l.propertyId === propertyId && l.status === 'active');
   const requests = [...maintenanceRequests.filter(m => m.propertyId === propertyId)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  const handleAdd = () => {
-    if (!form.title.trim()) return;
-    addMaintenanceRequest({
-      propertyId,
-      leaseId: activeLease?.id,
-      tenantId: activeLease?.tenantId,
-      title: form.title.trim(),
-      description: form.description,
-      status: 'open',
-      priority: form.priority as any,
-    });
-    showToast('Maintenance request added');
-    setShowAdd(false);
-    setForm({ title: '', description: '', priority: 'medium' });
+  const [saving, setSaving] = useState(false);
+  const handleAdd = async () => {
+    if (!form.title.trim() || saving) return;
+    setSaving(true);
+    try {
+      await addMaintenanceRequest({
+        propertyId,
+        leaseId: activeLease?.id,
+        tenantId: activeLease?.tenantId,
+        title: form.title.trim(),
+        description: form.description.trim(),
+        status: 'open',
+        priority: form.priority as any,
+      });
+      showToast('Maintenance request added');
+      setShowAdd(false);
+      setForm({ title: '', description: '', priority: 'medium' });
+    } catch (err) {
+      showToast(`Couldn't add request: ${errorMessage(err)}`, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const statusColors: Record<string, string> = {
@@ -787,7 +761,7 @@ export function MaintenanceTab({ propertyId }: Props) {
           </Field>
           <div className="flex gap-3 pt-2">
             <button onClick={() => setShowAdd(false)} className="btn-secondary flex-1 justify-center">Cancel</button>
-            <button onClick={handleAdd} className="btn-primary flex-1 justify-center">Add request</button>
+            <button onClick={handleAdd} disabled={saving || !form.title.trim()} className="btn-primary flex-1 justify-center">{saving ? 'Saving…' : 'Add request'}</button>
           </div>
         </div>
       </Modal>

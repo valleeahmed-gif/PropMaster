@@ -1,0 +1,24 @@
+# Cloudflare Workers static-asset headers. Keep the security block in sync
+# with SECURITY_HEADERS in worker.js (which covers SPA fallback responses).
+
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://d8j0ntlcm91z4.cloudfront.net; connect-src 'self' https://cghiodbvbggizghxuvna.supabase.co wss://cghiodbvbggizghxuvna.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Hashed build output never changes — cache for a year.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# HTML shells must revalidate so new deploys are picked up immediately.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/app/
+  Cache-Control: no-cache
+/app/index.html
+  Cache-Control: no-cache

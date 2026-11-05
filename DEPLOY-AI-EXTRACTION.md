@@ -107,7 +107,7 @@ The upload card now says "AI powered" and will:
 **"ANTHROPIC_API_KEY is not configured"**
 → Re-run Step 5, then re-deploy (Step 6)
 
-**"Extraction failed"**
+**"Extraction failed. Please try again or add the items manually."**
 → Check Supabase Edge Function logs:
 ```bash
 supabase functions logs extract-statement
@@ -122,12 +122,9 @@ supabase functions logs extract-statement
 
 ---
 
-## Cost reference
+## Model & cost
 
-| Statement type | Pages | Approx cost |
-|---|---|---|
-| COJ municipal account | 2–3 pages | ~R0.08 |
-| Body corporate levy | 1–2 pages | ~R0.04 |
-| eThekwini statement | 3–4 pages | ~R0.12 |
-
-At 50 statements/month: ~R4/month total.
+The function uses `claude-opus-5-5` at low effort with structured JSON
+output, so responses always match the expected shape. A 1–4 page statement
+is typically a few thousand input tokens — well under R1 per statement.
+Check current pricing at https://www.anthropic.com/pricing.

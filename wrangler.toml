@@ -2,15 +2,16 @@ name = "propmaster"
 main = "worker.js"
 compatibility_date = "2026-06-01"
 
-# Bind the built static files so the Worker can serve them via env.ASSETS.
-# The Worker (worker.js) handles SPA fallback for the two entry points:
-#   /            → landing page (dist/index.html)
-#   /app/*       → React app    (dist/app/index.html)
-#
-# We use a Worker script + ASSETS binding instead of a bare [assets] static
-# deployment because this project has TWO separate HTML entry points and the
-# plain _redirects approach hit Cloudflare's ".html-stripping" infinite-loop
-# detection. Explicit Worker routing avoids that entirely.
+# Static build output, served via the ASSETS binding. Files that exist are
+# served directly (headers from dist/_headers); worker.js only runs for
+# paths that are not files and handles the SPA fallbacks for the two entry
+# points (/ landing page, /app React app). See worker.js for why there is
+# no _redirects file.
 [assets]
 directory = "./dist"
 binding = "ASSETS"
+html_handling = "auto-trailing-slash"
+not_found_handling = "none"
+
+[observability]
+enabled = true

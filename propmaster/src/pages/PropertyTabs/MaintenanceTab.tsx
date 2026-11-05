@@ -1,1 +1,0 @@
-export { MaintenanceTab } from './PaymentsTab';

@@ -3,7 +3,7 @@ import { CreditCard, CheckCircle, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Modal, Field, Select, StatusBadge } from './UI';
 import { Invoice } from '../types';
-import { formatCurrency, formatDate, formatMonthYear, today } from '../utils';
+import { formatCurrency, formatDate, formatMonthYear, today, errorMessage } from '../utils';
 
 interface RecordPaymentModalProps {
   open: boolean;
@@ -17,6 +17,7 @@ interface RecordPaymentModalProps {
 const METHODS = [
   { value: 'bank_transfer', label: 'EFT / Bank Transfer' },
   { value: 'cash', label: 'Cash' },
+  { value: 'cheque', label: 'Cheque' },
   { value: 'payfast', label: 'PayFast' },
   { value: 'other', label: 'Other' },
 ];
@@ -27,10 +28,16 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
   // Derive the effective property — from invoice or explicit prop
   const effectivePropertyId = invoice?.propertyId ?? propertyId ?? '';
 
+  // Verified amount already paid against an invoice
+  const paidOn = (invId: string) => payments
+    .filter(p => p.invoiceId === invId && p.status === 'verified')
+    .reduce((s, p) => s + p.amount, 0);
+  const balanceOf = (inv: Invoice) => Math.max(Math.round((inv.totalAmount - paidOn(inv.id)) * 100) / 100, 0);
+
   // All unpaid invoices for this property (for standalone mode)
   const unpaidInvoices = invoices.filter(i =>
     i.propertyId === effectivePropertyId &&
-    (i.status === 'sent' || i.status === 'overdue' || i.status === 'draft')
+    (i.status === 'sent' || i.status === 'overdue' || i.status === 'partial' || i.status === 'draft')
   );
 
   const activeLease = leases.find(
@@ -53,11 +60,8 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
       // For partial invoices, pre-fill with the outstanding balance
       let defaultAmount = '';
       if (invoice) {
-        const paid = payments
-          .filter(p => p.invoiceId === invoice.id && p.status === 'verified')
-          .reduce((s, p) => s + p.amount, 0);
-        const balance = invoice.totalAmount - paid;
-        defaultAmount = balance > 0 ? String(balance) : String(invoice.totalAmount);
+        const balance = balanceOf(invoice);
+        defaultAmount = balance > 0 ? String(balance) : '';
       }
       setForm({
         amount: defaultAmount,
@@ -68,14 +72,20 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
       });
       setErrors({});
     }
-  }, [open, invoice, payments]);
+    // Only reset when the modal opens or the target invoice changes — not
+    // when payments update mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, invoice?.id]);
 
-  // The invoice that will be marked paid — either passed in or selected in form
+  // The invoice this payment is applied to — either passed in or selected in form
   const linkedInvoice = invoice ?? invoices.find(i => i.id === form.linkedInvoiceId);
+  const linkedBalance = linkedInvoice ? balanceOf(linkedInvoice) : 0;
+  const amountNum = Number(form.amount);
 
   const validate = () => {
     const e: Record<string, string> = {};
-    if (!form.amount || Number(form.amount) <= 0) e.amount = 'Enter a valid amount';
+    if (!form.amount || !(amountNum > 0)) e.amount = 'Enter a valid amount';
+    if (form.paymentDate && form.paymentDate > today()) e.paymentDate = 'Payment date cannot be in the future';
     if (!form.paymentDate) e.paymentDate = 'Payment date required';
     if (!activeLease) e.general = 'No active lease found for this property';
     setErrors(e);
@@ -83,14 +93,14 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
   };
 
   const handleSave = async () => {
-    if (!validate() || !activeLease) return;
+    if (saving || !validate() || !activeLease) return;
     setSaving(true);
     try {
       await addPayment({
         propertyId: effectivePropertyId,
         leaseId: activeLease.id,
         invoiceId: linkedInvoice?.id,
-        amount: Number(form.amount),
+        amount: Math.round(amountNum * 100) / 100,
         paymentDate: form.paymentDate,
         method: form.method as any,
         status: 'verified',
@@ -98,17 +108,15 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
       });
       // addPayment now handles invoice status automatically (paid / partial / overdue)
       const invLabel = linkedInvoice ? ` for ${linkedInvoice.invoiceNumber}` : '';
-      const amountNum = Number(form.amount);
-      const isPartial = linkedInvoice && amountNum < linkedInvoice.totalAmount;
-      const balance = linkedInvoice ? linkedInvoice.totalAmount - amountNum : 0;
+      const remaining = linkedInvoice ? linkedBalance - amountNum : 0;
       showToast(
-        isPartial
-          ? `Partial payment of ${formatCurrency(amountNum)} recorded — ${formatCurrency(balance)} still outstanding`
+        linkedInvoice && remaining > 0.005
+          ? `Partial payment of ${formatCurrency(amountNum)} recorded — ${formatCurrency(remaining)} still outstanding`
           : `Payment of ${formatCurrency(amountNum)}${invLabel} recorded`
       );
       onClose();
     } catch (err) {
-      showToast('Failed to record payment — please try again', 'error');
+      showToast(`Failed to record payment: ${errorMessage(err)}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -148,6 +156,9 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
               <div className="text-right flex-shrink-0">
                 <p className="text-xs text-gray-500">Invoice total</p>
                 <p className="text-lg font-bold text-gray-900">{formatCurrency(linkedInvoice.totalAmount)}</p>
+                {linkedBalance < linkedInvoice.totalAmount && (
+                  <p className="text-xs text-amber-700 font-medium mt-0.5">{formatCurrency(linkedBalance)} outstanding</p>
+                )}
               </div>
             </div>
           </div>
@@ -163,13 +174,13 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
                 setForm(f => ({
                   ...f,
                   linkedInvoiceId: e.target.value,
-                  amount: inv ? String(inv.totalAmount) : f.amount,
+                  amount: inv ? String(balanceOf(inv) || inv.totalAmount) : f.amount,
                 }));
               }}
               placeholder="Select invoice (optional)"
               options={unpaidInvoices.map(i => ({
                 value: i.id,
-                label: `${i.invoiceNumber} — ${formatMonthYear(i.month, i.year)} — ${formatCurrency(i.totalAmount)}`,
+                label: `${i.invoiceNumber} — ${formatMonthYear(i.month, i.year)} — ${formatCurrency(balanceOf(i))} due`,
               }))}
             />
           </Field>
@@ -188,14 +199,14 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
               onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
             />
           </div>
-          {linkedInvoice && Number(form.amount) > 0 && Number(form.amount) !== linkedInvoice.totalAmount && (
+          {linkedInvoice && amountNum > 0 && Math.abs(amountNum - linkedBalance) > 0.005 && (
             <div className={`mt-1.5 flex items-center gap-1.5 text-xs font-medium ${
-              Number(form.amount) < linkedInvoice.totalAmount ? 'text-amber-600' : 'text-green-600'
+              amountNum < linkedBalance ? 'text-amber-600' : 'text-green-600'
             }`}>
-              {Number(form.amount) < linkedInvoice.totalAmount ? (
-                <><AlertCircle size={12} /> Partial payment — {formatCurrency(linkedInvoice.totalAmount - Number(form.amount))} still outstanding</>
+              {amountNum < linkedBalance ? (
+                <><AlertCircle size={12} /> Partial payment — {formatCurrency(linkedBalance - amountNum)} will still be outstanding</>
               ) : (
-                <><CheckCircle size={12} /> Includes {formatCurrency(Number(form.amount) - linkedInvoice.totalAmount)} overpayment</>
+                <><CheckCircle size={12} /> Includes {formatCurrency(amountNum - linkedBalance)} overpayment</>
               )}
             </div>
           )}
@@ -207,6 +218,7 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
             <input
               className="input"
               type="date"
+              max={today()}
               value={form.paymentDate}
               onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))}
             />
@@ -239,7 +251,8 @@ export function RecordPaymentModal({ open, onClose, invoice, propertyId }: Recor
         {/* What happens on confirm */}
         {linkedInvoice && (
           <div className="rounded-lg bg-green-50 border border-green-100 px-4 py-3 text-xs text-green-800">
-            <span className="font-semibold">On confirm:</span> payment recorded + {linkedInvoice.invoiceNumber} marked as paid.
+            <span className="font-semibold">On confirm:</span> payment recorded against {linkedInvoice.invoiceNumber}
+            {amountNum + 0.005 >= linkedBalance ? ', which will be marked as paid.' : ', which will show as partially paid.'}
           </div>
         )}
 

@@ -1,6 +1,6 @@
 import React, { ReactNode, useState, useEffect } from 'react';
 import { Menu, Bell, WifiOff } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Sidebar, MobileSidebarOverlay } from './Sidebar';
 import { LogoIcon } from './Logo';
 import { ToastContainer } from './UI';
@@ -11,6 +11,7 @@ interface LayoutProps { children: ReactNode; }
 
 export function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { setSidebarOpen, maintenanceRequests, invoices } = useApp();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -96,7 +97,7 @@ export function Layout({ children }: LayoutProps) {
           tabIndex={-1}
         >
           <div
-            key={typeof window !== 'undefined' ? window.location.pathname : ''}
+            key={location.pathname}
             className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-8 page-enter"
           >
             {children}

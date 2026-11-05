@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StatusBadge, PriorityBadge } from '../components/UI';
-import { formatCurrency, formatDate } from '../utils';
+import { formatCurrency, formatDate, monthKey } from '../utils';
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -24,12 +24,9 @@ export function DashboardPage() {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
-  const rentThisMonth = myPayments
-    .filter(p => {
-      const d = new Date(p.paymentDate);
-      return d.getMonth() + 1 === currentMonth && d.getFullYear() === currentYear && p.status === 'verified';
-    })
-    .reduce((s, p) => s + p.amount, 0);
+  const thisMonth = monthKey(currentMonth, currentYear);
+  const paymentsThisMonth = myPayments.filter(p => p.status === 'verified' && p.paymentDate?.slice(0, 7) === thisMonth);
+  const rentThisMonth = paymentsThisMonth.reduce((s, p) => s + p.amount, 0);
 
   const overdueInvoices = myInvoices.filter(i => i.status === 'overdue');
   const sentInvoices    = myInvoices.filter(i => i.status === 'sent' || i.status === 'partial');
@@ -39,7 +36,7 @@ export function DashboardPage() {
     return s + Math.max(i.totalAmount - paid, 0);
   }, 0);
   const vacantProperties = myProperties.filter(p => !myLeases.find(l => l.propertyId === p.id));
-  const recentPayments  = [...myPayments].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
+  const recentPayments  = [...myPayments].sort((a, b) => b.paymentDate.localeCompare(a.paymentDate) || b.createdAt.localeCompare(a.createdAt)).slice(0, 4);
   const recentMaintenance = [...myMaintenance]
     .filter(m => m.status === 'open' || m.status === 'in_progress')
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -85,7 +82,7 @@ export function DashboardPage() {
         <StatTile
           label="Collected this month"
           value={formatCurrency(rentThisMonth)}
-          sub={recentPayments.length > 0 ? `${recentPayments.length} payments` : 'No payments yet'}
+          sub={paymentsThisMonth.length > 0 ? `${paymentsThisMonth.length} payment${paymentsThisMonth.length === 1 ? '' : 's'}` : 'No payments yet'}
           icon={<TrendingUp size={18} />}
           iconBg="bg-brass-50 text-brass-700"
           highlight
@@ -107,7 +104,7 @@ export function DashboardPage() {
         <h2 className="section-title mb-3">Quick actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 stagger">
           {[
-            { label: 'Add property',   icon: Building2,  path: '/properties',  bg: 'bg-brand-50',  fg: 'text-brand-700' },
+            { label: 'Add property',   icon: Building2,  path: '/properties?add=1', bg: 'bg-brand-50',  fg: 'text-brand-700' },
             { label: 'New invoice',    icon: FileText,   path: '/invoices',    bg: 'bg-brass-50',  fg: 'text-brass-700' },
             { label: 'Record payment', icon: CreditCard, path: '/payments',    bg: 'bg-brand-50',  fg: 'text-brand-700' },
             { label: 'Log maintenance',icon: Wrench,     path: '/maintenance', bg: 'bg-amber-50',  fg: 'text-amber-700' },
@@ -227,7 +224,7 @@ export function DashboardPage() {
               </p>
             </div>
             <button
-              onClick={() => navigate('/tenants')}
+              onClick={() => navigate(vacantProperties.length === 1 ? `/properties/${vacantProperties[0].id}` : '/properties')}
               className="text-xs font-bold text-amber-900 hover:text-amber-700 flex items-center gap-1 flex-shrink-0"
             >
               Add tenant <ArrowUpRight size={13} />

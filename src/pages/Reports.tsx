@@ -2,22 +2,28 @@ import React, { useState, useMemo } from 'react';
 import { BarChart2, FileText, AlertCircle, Download, TrendingUp, TrendingDown, Building2, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PageHeader, Tabs, StatusBadge } from '../components/UI';
-import { formatCurrency, formatDate, formatMonthYear, MONTHS } from '../utils';
+import { formatCurrency, formatDate, formatMonthYear, MONTHS, monthKey, daysUntil, errorMessage } from '../utils';
 
 // ── CSV export helper ──────────────────────────────────────
 function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
   const escape = (v: string | number) => {
-    const s = String(v);
-    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    let s = String(v ?? '');
+    // Neutralise spreadsheet formulas in text cells (CSV injection), but
+    // leave plain numbers such as "-120.00" alone.
+    if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`;
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const csv = [headers, ...rows].map(row => row.map(escape).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const csv = [headers, ...rows].map(row => row.map(escape).join(',')).join('\r\n');
+  // BOM so Excel opens UTF-8 (names with accents, "—") correctly.
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ── Summary Stat ───────────────────────────────────────────
@@ -49,7 +55,7 @@ function ProfitLossReport() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const myProperties = properties.filter(p => p.ownerId === user?.id);
-  const years = [now.getFullYear() - 2, now.getFullYear() - 1, now.getFullYear()];
+  const years = [now.getFullYear() - 4, now.getFullYear() - 3, now.getFullYear() - 2, now.getFullYear() - 1, now.getFullYear()];
 
   // ── Auto-correct: if from > to, snap to to the same period ─
   const handleFromMonth = (m: number) => {
@@ -65,20 +71,20 @@ function ProfitLossReport() {
     if (fromTs > toTs) { setToMonth(fromMonth); setToYear(y); }
   };
 
+  // Compare as "YYYY-MM" strings — parsing "YYYY-MM-DD" with new Date()
+  // gives UTC midnight, which dropped last-day payments in SA time.
+  const fromKey = monthKey(fromMonth, fromYear);
+  const toKey = monthKey(toMonth, toYear);
   const inRange = (dateStr: string) => {
     if (!dateStr) return false;
-    const d = new Date(dateStr);
-    const from = new Date(fromYear, fromMonth - 1, 1);
-    const to = new Date(toYear, toMonth, 0);
-    return d >= from && d <= to;
+    const k = dateStr.slice(0, 7);
+    return k >= fromKey && k <= toKey;
   };
 
-  // Check if an invoice month/year falls in range
+  // Check if an invoice / cost month+year falls in range
   const invoiceInRange = (month: number, year: number) => {
-    const d = new Date(year, month - 1, 1);
-    const from = new Date(fromYear, fromMonth - 1, 1);
-    const to = new Date(toYear, toMonth, 0);
-    return d >= from && d <= to;
+    const k = monthKey(month, year);
+    return k >= fromKey && k <= toKey;
   };
 
   const pnlData = useMemo(() => {
@@ -96,13 +102,7 @@ function ProfitLossReport() {
       const totalCollected = propPayments.reduce((s, p) => s + p.amount, 0);
 
       // ── Running costs for this period ─────────────────────
-      const propCosts = propertyCosts.filter(c => {
-        if (c.propertyId !== prop.id) return false;
-        const d = new Date(c.year, c.month - 1, 1);
-        const from = new Date(fromYear, fromMonth - 1, 1);
-        const to = new Date(toYear, toMonth, 0);
-        return d >= from && d <= to;
-      });
+      const propCosts = propertyCosts.filter(c => c.propertyId === prop.id && invoiceInRange(c.month, c.year));
 
       const allBreakdowns = propCosts.flatMap(c =>
         utilityBreakdowns.filter(b => b.propertyCostId === c.id)
@@ -168,7 +168,8 @@ function ProfitLossReport() {
         payments: propPayments,
       };
     });
-  }, [selectedProperty, fromMonth, fromYear, toMonth, toYear, payments, propertyCosts, utilityBreakdowns, invoices]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProperty, fromKey, toKey, properties, user?.id, payments, propertyCosts, utilityBreakdowns, invoices]);
 
   const totals = useMemo(() => ({
     collected:      pnlData.reduce((s, r) => s + r.totalCollected, 0),
@@ -250,13 +251,21 @@ function ProfitLossReport() {
           </div>
           <div>
             <label className="label">To month</label>
-            <select className="input" value={toMonth} onChange={e => setToMonth(Number(e.target.value))}>
+            <select className="input" value={toMonth} onChange={e => {
+              const m = Number(e.target.value);
+              setToMonth(m);
+              if (monthKey(m, toYear) < fromKey) { setFromMonth(m); setFromYear(toYear); }
+            }}>
               {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
           </div>
           <div>
             <label className="label">To year</label>
-            <select className="input" value={toYear} onChange={e => setToYear(Number(e.target.value))}>
+            <select className="input" value={toYear} onChange={e => {
+              const y = Number(e.target.value);
+              setToYear(y);
+              if (monthKey(toMonth, y) < fromKey) { setFromMonth(toMonth); setFromYear(y); }
+            }}>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           </div>
@@ -532,7 +541,7 @@ function RentRollReport() {
     // Days until lease end
     let daysToExpiry: number | null = null;
     if (lease?.endDate) {
-      daysToExpiry = Math.ceil((new Date(lease.endDate).getTime() - Date.now()) / 86400000);
+      daysToExpiry = daysUntil(lease.endDate);
     }
 
     return { prop, lease, tenant, lastPayment, outstanding, daysToExpiry };
@@ -756,10 +765,7 @@ function OutstandingReport() {
     total: outstanding.reduce((s, i) => s + (i.status === 'draft' ? i.totalAmount : balanceOf(i)), 0),
   };
 
-  const daysOverdue = (dueDateStr: string) => {
-    const days = Math.floor((Date.now() - new Date(dueDateStr).getTime()) / 86400000);
-    return days > 0 ? days : 0;
-  };
+  const daysOverdue = (dueDateStr: string) => Math.max(-daysUntil(dueDateStr), 0);
 
   const buildRows = () => outstanding.map(inv => {
     const prop = properties.find(p => p.id === inv.propertyId);
@@ -807,8 +813,12 @@ function OutstandingReport() {
   };
 
   const markOverdue = async (id: string) => {
-    await updateInvoice(id, { status: 'overdue' });
-    showToast('Invoice marked overdue');
+    try {
+      await updateInvoice(id, { status: 'overdue' });
+      showToast('Invoice marked overdue');
+    } catch (err) {
+      showToast(`Couldn't update invoice: ${errorMessage(err)}`, 'error');
+    }
   };
 
   return (
@@ -949,7 +959,7 @@ export function ReportsPage() {
   const [tab, setTab] = useState('pnl');
   const { invoices, user } = useApp();
   const overdueCount = invoices.filter(i => i.ownerId === user?.id && i.status === 'overdue').length;
-  const sentCount = invoices.filter(i => i.ownerId === user?.id && i.status === 'sent').length;
+  const sentCount = invoices.filter(i => i.ownerId === user?.id && (i.status === 'sent' || i.status === 'partial')).length;
 
   return (
     <div>

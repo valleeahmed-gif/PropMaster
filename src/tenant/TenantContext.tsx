@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, Rea
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { Tenant, Lease, Property, Invoice, Payment, MaintenanceRequest, Toast, User } from '../types';
-import { generateId } from '../utils';
+import { generateId, deriveInvoiceStatus } from '../utils';
 
 // ── Shape ──────────────────────────────────────────────────
 interface TenantState {
@@ -71,7 +71,7 @@ const mapProperty = (r: any): Property => ({
 const mapInvoice = (r: any): Invoice => ({
   id: r.id, propertyId: r.property_id, leaseId: r.lease_id, ownerId: r.owner_id,
   invoiceNumber: r.invoice_number, month: r.month, year: r.year, dueDate: r.due_date,
-  lineItems: r.line_items || [], totalAmount: r.total_amount, status: r.status, createdAt: r.created_at,
+  lineItems: Array.isArray(r.line_items) ? r.line_items : [], totalAmount: Number(r.total_amount) || 0, status: r.status, createdAt: r.created_at,
 });
 const mapPayment = (r: any): Payment => ({
   id: r.id, propertyId: r.property_id, leaseId: r.lease_id, invoiceId: r.invoice_id,
@@ -142,32 +142,35 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // 1. Find the tenant record linked to this auth user
-      const { data: tenantData, error: tErr } = await supabase
+      // 1. Find the tenant record(s) linked to this auth user. The same person
+      //    can be a tenant of more than one landlord, so don't assume one row.
+      const { data: tenantRows, error: tErr } = await supabase
         .from('tenants')
         .select('*')
         .eq('user_id', sbUser.id)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
 
       if (tErr) throw tErr;
 
-      if (!tenantData) {
+      if (!tenantRows || tenantRows.length === 0) {
         setLoadError('No tenant record linked to your account. Please contact your landlord.');
         return;
       }
 
-      const tenant = mapTenant(tenantData);
-      setTenantRecord(tenant);
-
-      // 2. Find the active lease
-      const { data: leaseData, error: lErr } = await supabase
+      // 2. Find the active lease (most recent) across those records
+      const { data: leaseRows, error: lErr } = await supabase
         .from('leases')
         .select('*')
-        .eq('tenant_id', tenant.id)
+        .in('tenant_id', tenantRows.map((t: any) => t.id))
         .eq('status', 'active')
-        .maybeSingle();
+        .order('start_date', { ascending: false })
+        .limit(1);
 
       if (lErr) throw lErr;
+      const leaseData = leaseRows?.[0] ?? null;
+
+      const tenant = mapTenant(tenantRows.find((t: any) => t.id === leaseData?.tenant_id) ?? tenantRows[0]);
+      setTenantRecord(tenant);
 
       if (!leaseData) {
         // Tenant linked but no active lease — partial state, show empty
@@ -185,34 +188,31 @@ export function TenantProvider({ children }: { children: ReactNode }) {
       // 3. Load property + invoices + payments + maintenance in parallel
       const [
         { data: propData, error: pErr },
-        { data: invData },
-        { data: payData },
-        { data: maintData },
+        { data: invData, error: iErr },
+        { data: payData, error: payErr },
+        { data: maintData, error: mErr },
       ] = await Promise.all([
         supabase.from('properties').select('*').eq('id', lease.propertyId).maybeSingle(),
-        supabase.from('invoices').select('*').eq('lease_id', lease.id).order('due_date', { ascending: false }),
+        supabase.from('invoices').select('*').eq('lease_id', lease.id).neq('status', 'draft').neq('status', 'cancelled').order('due_date', { ascending: false }),
         supabase.from('payments').select('*').eq('lease_id', lease.id).eq('status', 'verified').order('payment_date', { ascending: false }),
         supabase.from('maintenance_requests').select('*').eq('tenant_id', tenant.id).order('created_at', { ascending: false }),
       ]);
 
-      if (pErr) throw pErr;
+      if (pErr || iErr || payErr || mErr) throw pErr || iErr || payErr || mErr;
 
       if (propData) setProperty(mapProperty(propData));
-      setInvoices((invData || []).map(mapInvoice));
-      setPayments((payData || []).map(mapPayment));
+      const mappedPays = (payData || []).map(mapPayment);
+      setPayments(mappedPays);
       setMaintenanceRequests((maintData || []).map(mapMaintenance));
 
-      // ── Auto-flag overdue invoices on the client ─────────
-      // Same logic as landlord portal: any sent/partial invoice past due_date
-      // shows as overdue. We don't write back here (RLS prevents tenant updates).
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      setInvoices(prev => prev.map(i => {
-        if ((i.status === 'sent' || i.status === 'partial') && i.dueDate) {
-          const due = new Date(i.dueDate); due.setHours(0, 0, 0, 0);
-          if (due < today) return { ...i, status: 'overdue' as const };
-        }
-        return i;
-      }));
+      // Same status rules as the landlord portal (display only — tenants
+      // can't write invoices).
+      const paidMap: Record<string, number> = {};
+      mappedPays.forEach(p => { if (p.invoiceId) paidMap[p.invoiceId] = (paidMap[p.invoiceId] || 0) + p.amount; });
+      setInvoices((invData || []).map(mapInvoice).map(i => ({
+        ...i,
+        status: deriveInvoiceStatus(i.status, i.totalAmount, paidMap[i.id] || 0, i.dueDate) as Invoice['status'],
+      })));
 
     } catch (err: any) {
       console.error('Tenant data load error:', err);

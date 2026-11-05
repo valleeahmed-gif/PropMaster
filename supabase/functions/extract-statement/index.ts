@@ -1,201 +1,177 @@
 // supabase/functions/extract-statement/index.ts
 // Deploy with: supabase functions deploy extract-statement
-// Set secret: supabase secrets set ANTHROPIC_API_KEY=your_key_here
+// Set secret:  supabase secrets set ANTHROPIC_API_KEY=your_key_here
+//
+// Receives a base64 PDF (municipal / levy statement), asks Claude to
+// extract the individual charge lines, and returns them for the landlord
+// to review. Nothing is written to running costs here — the client adds
+// the items the landlord confirms.
 
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import Anthropic from 'npm:@anthropic-ai/sdk@1.4.0';
+import { createClient } from 'npm:@supabase/supabase-js@2.119.0';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: CORS });
-  }
+// ~10 MB PDF → ~13.4 MB base64. Keeps us well under the API's 32 MB
+// request limit and the edge runtime's memory budget.
+const MAX_BASE64_LENGTH = 14_000_000;
 
-  try {
-    // ── 1. Auth check ──────────────────────────────────────
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401, headers: { ...CORS, 'Content-Type': 'application/json' },
-      });
-    }
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...CORS, 'Content-Type': 'application/json' },
+  });
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: authHeader } } }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401, headers: { ...CORS, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── 2. Parse request ───────────────────────────────────
-    const body = await req.json();
-    const { fileBase64, fileName, propertyId, uploadId } = body;
-
-    if (!fileBase64 || !propertyId) {
-      return new Response(JSON.stringify({ error: 'fileBase64 and propertyId are required' }), {
-        status: 400, headers: { ...CORS, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── 3. Verify property ownership ───────────────────────
-    const { data: property, error: propError } = await supabase
-      .from('properties')
-      .select('id, name')
-      .eq('id', propertyId)
-      .eq('owner_id', user.id)
-      .single();
-
-    if (propError || !property) {
-      return new Response(JSON.stringify({ error: 'Property not found or access denied' }), {
-        status: 403, headers: { ...CORS, 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ── 4. Update upload status to processing ──────────────
-    if (uploadId) {
-      await supabase
-        .from('statement_uploads')
-        .update({ extraction_status: 'processing' })
-        .eq('id', uploadId)
-        .eq('owner_id', user.id);
-    }
-
-    // ── 5. Call Claude API ─────────────────────────────────
-    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!anthropicKey) {
-      throw new Error('ANTHROPIC_API_KEY is not configured in Supabase secrets');
-    }
-
-    const claudeResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicKey,
-        'anthropic-version': '2023-06-01',
+// Structured output schema — the API guarantees the response matches it.
+const LINE_ITEMS_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          label: { type: 'string' },
+          amount: { type: 'number' },
+          is_recoverable: { type: 'boolean' },
+        },
+        required: ['label', 'amount', 'is_recoverable'],
+        additionalProperties: false,
       },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'document',
-                source: {
-                  type: 'base64',
-                  media_type: 'application/pdf',
-                  data: fileBase64,
-                },
-              },
-              {
-                type: 'text',
-                text: `You are extracting utility and levy line items from a South African municipal account or body corporate levy statement (City of Johannesburg, City of Cape Town, eThekwini, or similar).
+    },
+  },
+  required: ['items'],
+  additionalProperties: false,
+};
 
-Extract every individual charge line item from this document.
+const PROMPT = `You are extracting charge line items from a South African municipal account or body corporate levy statement (City of Johannesburg, City of Cape Town, eThekwini, or similar).
 
-Return ONLY a valid JSON array — no explanation, no markdown, no code fences. Just the raw JSON array.
-
-Each item must have exactly these fields:
-- "label": string — the name of the charge (e.g. "Electricity", "Water & Sanitation", "Refuse Removal", "Levy", "Sewerage", "Rates", "Gas")
-- "amount": number — the rand amount as a number (no currency symbols, no commas)
-- "is_recoverable": boolean — true if this is a usage-based charge the tenant should pay (electricity, water, gas, refuse), false if it is an ownership cost (levy, rates, insurance, admin fee)
+For each individual service charge on the statement, return:
+- "label": plain-English name of the charge (e.g. "Electricity", "Water & Sanitation", "Refuse Removal", "Levy", "Sewerage", "Rates", "Gas"). Translate Afrikaans labels (e.g. "Elektrisiteit" → "Electricity", "Water en Riool" → "Water & Sanitation").
+- "amount": the rand amount for the current period as a plain number.
+- "is_recoverable": true for usage-based charges a tenant normally pays (electricity, water, sanitation, gas, refuse); false for ownership costs (levy, rates, insurance, admin fees).
 
 Rules:
-- Normalise label names to plain English (e.g. "Elektrisiteit" → "Electricity", "Water en Riool" → "Water & Sanitation")
-- If an amount appears as a credit (negative), still include it with the negative value
-- Exclude VAT line items — include only the pre-VAT or total-per-service amounts
-- If the same service appears multiple times (e.g. multiple electricity readings), sum them into one entry
-- Do not include payment totals, previous balance, or "amount due" summary lines — only individual service charges
-- If you cannot find any extractable line items, return an empty array []
+- If one service appears several times (e.g. multiple electricity readings), combine them into one item.
+- Use VAT-inclusive totals per service where the statement shows them; do not add separate VAT lines.
+- Leave out credits, payments received, previous balances, interest on arrears, and "amount due" summary lines — only current-period service charges.
+- If there are no extractable charges, return an empty items list.`;
 
-Example output format:
-[{"label":"Electricity","amount":1842.50,"is_recoverable":true},{"label":"Water & Sanitation","amount":634.00,"is_recoverable":true},{"label":"Refuse Removal","amount":195.00,"is_recoverable":true},{"label":"Levy","amount":750.00,"is_recoverable":false}]`,
-              },
-            ],
-          },
+const anthropic = new Anthropic(); // reads ANTHROPIC_API_KEY
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  if (req.method !== 'POST') return json({ success: false, error: 'Method not allowed' }, 405);
+
+  // ── 1. Auth ──────────────────────────────────────────────
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) return json({ success: false, error: 'Missing authorization header' }, 401);
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    { global: { headers: { Authorization: authHeader } } },
+  );
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return json({ success: false, error: 'Unauthorized' }, 401);
+
+  // ── 2. Parse + validate request ──────────────────────────
+  let body: { fileBase64?: unknown; fileName?: unknown; propertyId?: unknown; uploadId?: unknown };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ success: false, error: 'Invalid JSON body' }, 400);
+  }
+  const { fileBase64, fileName, propertyId, uploadId } = body;
+
+  if (typeof fileBase64 !== 'string' || !fileBase64 || typeof propertyId !== 'string') {
+    return json({ success: false, error: 'fileBase64 and propertyId are required' }, 400);
+  }
+  if (fileBase64.length > MAX_BASE64_LENGTH) {
+    return json({ success: false, error: 'PDF is too large (max 10 MB)' }, 413);
+  }
+  // Cheap magic-number check: base64 of "%PDF" is "JVBER".
+  if (!fileBase64.startsWith('JVBER')) {
+    return json({ success: false, error: 'File is not a PDF' }, 400);
+  }
+
+  // ── 3. Verify property ownership (RLS also enforces this) ─
+  const { data: property } = await supabase
+    .from('properties')
+    .select('id')
+    .eq('id', propertyId)
+    .eq('owner_id', user.id)
+    .maybeSingle();
+  if (!property) return json({ success: false, error: 'Property not found or access denied' }, 403);
+
+  const setUploadStatus = async (fields: Record<string, unknown>) => {
+    if (typeof uploadId !== 'string') return;
+    await supabase.from('statement_uploads').update(fields).eq('id', uploadId).eq('owner_id', user.id);
+  };
+
+  await setUploadStatus({ extraction_status: 'processing' });
+
+  // ── 4. Ask Claude ────────────────────────────────────────
+  try {
+    const response = await anthropic.beta.messages.create({
+      model: 'claude-opus-5-5',
+      max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: {
+        effort: 'low',
+        format: { type: 'json_schema', schema: LINE_ITEMS_SCHEMA },
+      },
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } },
+          { type: 'text', text: PROMPT },
         ],
-      }),
+      }],
     });
 
-    if (!claudeResponse.ok) {
-      const errorText = await claudeResponse.text();
-      console.error('Claude API error:', claudeResponse.status, errorText);
-      throw new Error(`Claude API returned ${claudeResponse.status}: ${errorText}`);
+    if (response.stop_reason === 'refusal') {
+      await setUploadStatus({ extraction_status: 'failed' });
+      return json({ success: false, error: 'This document could not be processed. Please add the items manually.' }, 422);
+    }
+    if (response.stop_reason === 'max_tokens') {
+      throw new Error('Response truncated (max_tokens)');
     }
 
-    const claudeData = await claudeResponse.json();
-    const rawText = claudeData.content?.[0]?.text ?? '';
+    const text = response.content
+      .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
+    const parsed = JSON.parse(text) as { items: { label: string; amount: number; is_recoverable: boolean }[] };
 
-    // ── 6. Parse Claude's response ─────────────────────────
-    let extractedItems: { label: string; amount: number; is_recoverable: boolean }[] = [];
+    // Schema guarantees shape; still drop blanks, non-finite and non-positive
+    // amounts (the DB rejects negatives) and round to cents.
+    const items = parsed.items
+      .map((i) => ({ label: i.label.trim(), amount: Math.round(i.amount * 100) / 100, is_recoverable: i.is_recoverable }))
+      .filter((i) => i.label && Number.isFinite(i.amount) && i.amount > 0);
 
-    try {
-      // Strip any accidental markdown fences just in case
-      const cleaned = rawText.replace(/```json|```/g, '').trim();
-      extractedItems = JSON.parse(cleaned);
+    await setUploadStatus({ extraction_status: 'complete', extracted_data: items });
 
-      // Validate shape
-      if (!Array.isArray(extractedItems)) throw new Error('Response is not an array');
-      extractedItems = extractedItems.filter(item =>
-        typeof item.label === 'string' &&
-        typeof item.amount === 'number' &&
-        typeof item.is_recoverable === 'boolean'
-      );
-    } catch (parseError) {
-      console.error('Failed to parse Claude response:', rawText);
-      throw new Error('Claude returned an unexpected format — could not parse line items');
-    }
-
-    // ── 7. Update upload record with results ───────────────
-    if (uploadId) {
-      await supabase
-        .from('statement_uploads')
-        .update({
-          extraction_status: 'complete',
-          extracted_data: extractedItems,
-        })
-        .eq('id', uploadId)
-        .eq('owner_id', user.id);
-    }
-
-    // ── 8. Return extracted items ──────────────────────────
-    return new Response(
-      JSON.stringify({
-        success: true,
-        items: extractedItems,
-        count: extractedItems.length,
-        fileName,
-      }),
-      {
-        status: 200,
-        headers: { ...CORS, 'Content-Type': 'application/json' },
-      }
-    );
-
+    return json({ success: true, items, count: items.length, fileName });
   } catch (error) {
-    console.error('extract-statement error:', error);
-
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : 'Extraction failed',
-        success: false,
-      }),
-      {
-        status: 500,
-        headers: { ...CORS, 'Content-Type': 'application/json' },
-      }
-    );
+    // Log details server-side; never echo upstream error bodies to the browser.
+    if (error instanceof Anthropic.RateLimitError) {
+      console.error('extract-statement: rate limited', error.status);
+      await setUploadStatus({ extraction_status: 'failed' });
+      return json({ success: false, error: 'The AI service is busy. Please try again in a minute.' }, 503);
+    }
+    if (error instanceof Anthropic.APIError) {
+      console.error('extract-statement: Anthropic API error', error.status, error.message);
+    } else {
+      console.error('extract-statement error:', error);
+    }
+    await setUploadStatus({ extraction_status: 'failed' });
+    return json({ success: false, error: 'Extraction failed. Please try again or add the items manually.' }, 502);
   }
 });

@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext';
 import { Property, Province } from '../types';
 import { Modal, ConfirmDialog, EmptyState, PageHeader, StatusBadge, Tabs, Field, Select } from '../components/UI';
 import {
-  formatCurrency, formatDate, PROVINCES,
+  formatCurrency, formatDate, PROVINCES, errorMessage,
   PROPERTY_CATEGORIES, PROPERTY_TYPES, BATHROOM_TYPES, labelFor,
 } from '../utils';
 import { LeasesTab } from './PropertyTabs/LeasesTab';
@@ -52,6 +52,7 @@ function PropertyForm({ open, onClose, property }: PropertyFormProps) {
   }, [property, open]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -65,8 +66,8 @@ function PropertyForm({ open, onClose, property }: PropertyFormProps) {
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = () => {
-    if (!validate()) return;
+  const handleSave = async () => {
+    if (!validate() || saving) return;
     const data = {
       name: form.name, address: form.address,
       suburb: form.suburb || undefined,
@@ -74,17 +75,30 @@ function PropertyForm({ open, onClose, property }: PropertyFormProps) {
       city: form.city, province: form.province,
       category: (form.category || undefined) as Property['category'],
       propertyType: (form.propertyType || undefined) as Property['propertyType'],
-      bedrooms: form.bedrooms ? Number(form.bedrooms) : undefined,
-      bathrooms: form.bathrooms ? Number(form.bathrooms) : undefined,
+      bedrooms: form.bedrooms ? Math.max(0, Math.round(Number(form.bedrooms))) : undefined,
+      bathrooms: form.bathrooms ? Math.max(0, Number(form.bathrooms)) : undefined,
       bathroomType: (form.bathroomType || undefined) as Property['bathroomType'],
       floor: form.floor || undefined,
       block: form.block || undefined,
       unitNumber: form.unitNumber || undefined,
-      erfSize: form.erfSize ? Number(form.erfSize) : undefined,
+      erfSize: form.erfSize ? Math.max(0, Number(form.erfSize)) : undefined,
     };
-    if (property) { updateProperty(property.id, data); showToast('Property updated'); }
-    else { addProperty(data); showToast('Property added'); }
-    onClose();
+    // Editing: send cleared optional fields explicitly so they are removed.
+    if (property) {
+      for (const k of ['suburb','postalCode','category','propertyType','bedrooms','bathrooms','bathroomType','floor','block','unitNumber','erfSize'] as const) {
+        if ((data as any)[k] === undefined) (data as any)[k] = null;
+      }
+    }
+    setSaving(true);
+    try {
+      if (property) { await updateProperty(property.id, data); showToast('Property updated'); }
+      else { await addProperty(data); showToast('Property added'); }
+      onClose();
+    } catch (err) {
+      showToast(`Couldn't save property: ${errorMessage(err)}`, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -191,7 +205,9 @@ function PropertyForm({ open, onClose, property }: PropertyFormProps) {
 
         <div className="flex gap-3 pt-2">
           <button onClick={onClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-          <button onClick={handleSave} className="btn-primary flex-1 justify-center">{property ? 'Save changes' : 'Add property'}</button>
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 justify-center">
+            {saving ? 'Saving…' : property ? 'Save changes' : 'Add property'}
+          </button>
         </div>
       </div>
     </Modal>
@@ -290,12 +306,13 @@ const TABS = [
 export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { properties, leases, tenants, invoices, payments, maintenanceRequests, deleteProperty, showToast } = useApp();
+  const { properties, leases, tenants, invoices, payments, maintenanceRequests, deleteProperty, showToast, dataLoading } = useApp();
   const [tab, setTab] = useState('overview');
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 
   const property = properties.find(p => p.id === id);
+  if (!property && dataLoading) return <div className="card p-8 text-center text-sm text-gray-500">Loading…</div>;
   if (!property) return (
     <div className="card p-8 text-center">
       <p className="text-gray-500">Property not found.</p>
@@ -310,12 +327,20 @@ export function PropertyDetailPage() {
   const propMaintenance = maintenanceRequests.filter(m => m.propertyId === id);
 
   const totalCollected = propPayments.filter(p => p.status === 'verified').reduce((s, p) => s + p.amount, 0);
-  const outstanding = propInvoices.filter(i => i.status === 'sent' || i.status === 'overdue').reduce((s, i) => s + i.totalAmount, 0);
+  const verifiedPaid = (invId: string) =>
+    propPayments.filter(p => p.invoiceId === invId && p.status === 'verified').reduce((s, p) => s + p.amount, 0);
+  const outstanding = propInvoices
+    .filter(i => i.status === 'sent' || i.status === 'overdue' || i.status === 'partial')
+    .reduce((s, i) => s + Math.max(i.totalAmount - verifiedPaid(i.id), 0), 0);
 
-  const handleDelete = () => {
-    deleteProperty(id!);
-    showToast('Property deleted');
-    navigate('/properties');
+  const handleDelete = async () => {
+    try {
+      await deleteProperty(id!);
+      showToast('Property deleted');
+      navigate('/properties');
+    } catch (err) {
+      showToast(`Couldn't delete property: ${errorMessage(err)}`, 'error');
+    }
   };
 
   return (

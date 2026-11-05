@@ -94,7 +94,7 @@ export interface Lease {
   dueDay?: number;
   rentAmount: number;
   depositPaid: number;
-  status: 'active' | 'ended' | 'pending';
+  status: 'active' | 'ended' | 'pending' | 'cancelled';
   createdAt: string;
 }
 
@@ -135,7 +135,7 @@ export interface Invoice {
   dueDate: string;
   lineItems: InvoiceLineItem[];
   totalAmount: number;
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'partial';
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'partial' | 'cancelled';
   createdAt: string;
 }
 
@@ -147,7 +147,7 @@ export interface Payment {
   ownerId: string;
   amount: number;
   paymentDate: string;
-  method: 'payfast' | 'eft' | 'cash' | 'other';
+  method: 'bank_transfer' | 'eft' | 'cash' | 'cheque' | 'payfast' | 'other';
   payfastPaymentId?: string;
   status: 'pending' | 'verified' | 'failed';
   notes?: string;
@@ -155,7 +155,7 @@ export interface Payment {
 }
 
 export type MaintenancePriority = 'low' | 'medium' | 'high' | 'urgent';
-export type MaintenanceStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+export type MaintenanceStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'completed' | 'cancelled';
 
 export interface MaintenanceRequest {
   id: string;

@@ -4,7 +4,19 @@ import { useApp } from '../../context/AppContext';
 import { Modal, ConfirmDialog, EmptyState, StatusBadge, Field, Select } from '../../components/UI';
 import { RecordPaymentModal } from '../../components/RecordPaymentModal';
 import { Invoice, InvoiceLineItem } from '../../types';
-import { formatCurrency, formatDate, formatMonthYear, MONTHS } from '../../utils';
+import { formatCurrency, formatDate, formatMonthYear, MONTHS, errorMessage, today } from '../../utils';
+
+// Clean up line items before saving: trim, drop empty rows, round to cents.
+function cleanLineItems(items: InvoiceLineItem[]): { items: InvoiceLineItem[]; error: string | null } {
+  const cleaned = items
+    .map(l => ({ description: l.description.trim(), amount: Math.round((Number(l.amount) || 0) * 100) / 100 }))
+    .filter(l => l.description || l.amount !== 0);
+  if (cleaned.length === 0) return { items: cleaned, error: 'Add at least one line item' };
+  if (cleaned.some(l => !l.description)) return { items: cleaned, error: 'Every line item needs a description' };
+  const total = cleaned.reduce((s, l) => s + l.amount, 0);
+  if (total < 0) return { items: cleaned, error: 'Invoice total cannot be negative' };
+  return { items: cleaned, error: null };
+}
 
 interface Props { propertyId: string; }
 
@@ -56,7 +68,7 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
     // Build initial line items: rent first, then any recoverable costs the user includes
     const items: InvoiceLineItem[] = [
       {
-        description: `Monthly Rent — ${MONTHS.find(m2 => m2.value === month)?.label} ${year}`,
+        description: `${activeLease.rentFrequency === 'monthly' || !activeLease.rentFrequency ? 'Monthly Rent' : 'Rent'} — ${MONTHS.find(m2 => m2.value === month)?.label} ${year}`,
         amount: activeLease.rentAmount,
       },
     ];
@@ -90,22 +102,26 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
   const addBlankItem = () =>
     setLineItems(prev => [...prev, { description: '', amount: 0 }]);
 
-  const total = lineItems.reduce((s, l) => s + l.amount, 0);
+  const total = lineItems.reduce((s, l) => s + (Number(l.amount) || 0), 0);
 
   const handleCreate = async () => {
-    if (!dueDate || lineItems.length === 0) return;
+    if (!dueDate || saving) return;
+    const { items, error } = cleanLineItems(lineItems);
+    if (error) { showToast(error, 'error'); return; }
     setSaving(true);
     try {
       await addInvoice({
         propertyId,
         leaseId: activeLease.id,
         month, year, dueDate,
-        lineItems,
-        totalAmount: total,
+        lineItems: items,
+        totalAmount: Math.round(items.reduce((s, l) => s + l.amount, 0) * 100) / 100,
         status: 'draft',
       });
       showToast('Invoice created as draft — edit anytime before sending');
       onClose();
+    } catch (err) {
+      showToast(`Couldn't create invoice: ${errorMessage(err)}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -239,6 +255,8 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
                       className="w-full bg-transparent text-sm font-bold text-gray-900 outline-none text-right pr-1 pl-5"
                       type="number"
                       inputMode="decimal"
+                      step="0.01"
+                      aria-label="Amount"
                       value={item.amount || ''}
                       onChange={e => updateItem(i, 'amount', e.target.value)}
                     />
@@ -288,7 +306,7 @@ function EditInvoiceModal({ invoice, onClose }: { invoice: Invoice; onClose: () 
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>(invoice.lineItems);
   const [saving, setSaving] = useState(false);
 
-  const total = lineItems.reduce((s, l) => s + l.amount, 0);
+  const total = lineItems.reduce((s, l) => s + (Number(l.amount) || 0), 0);
 
   const updateItem = (i: number, field: keyof InvoiceLineItem, val: string) =>
     setLineItems(prev => prev.map((l, idx) => idx === i
@@ -300,11 +318,20 @@ function EditInvoiceModal({ invoice, onClose }: { invoice: Invoice; onClose: () 
   const addBlankItem = () => setLineItems(prev => [...prev, { description: '', amount: 0 }]);
 
   const handleSave = async () => {
+    if (saving) return;
+    if (!dueDate) { showToast('Due date is required', 'error'); return; }
+    const { items, error } = cleanLineItems(lineItems);
+    if (error) { showToast(error, 'error'); return; }
     setSaving(true);
     try {
-      await updateInvoice(invoice.id, { dueDate, lineItems, totalAmount: total });
+      await updateInvoice(invoice.id, {
+        dueDate, lineItems: items,
+        totalAmount: Math.round(items.reduce((s, l) => s + l.amount, 0) * 100) / 100,
+      });
       showToast('Invoice updated');
       onClose();
+    } catch (err) {
+      showToast(`Couldn't save invoice: ${errorMessage(err)}`, 'error');
     } finally {
       setSaving(false);
     }
@@ -518,15 +545,23 @@ export function InvoicesTab({ propertyId }: Props) {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   const handleMarkSent = async (inv: Invoice) => {
-    await updateInvoice(inv.id, { status: 'sent' });
-    showToast(`${inv.invoiceNumber} marked as sent`);
+    try {
+      const overdue = inv.dueDate < today();
+      await updateInvoice(inv.id, { status: overdue ? 'overdue' : 'sent' });
+      showToast(`${inv.invoiceNumber} marked as sent`);
+    } catch (err) {
+      showToast(`Couldn't update invoice: ${errorMessage(err)}`, 'error');
+    }
   };
 
   const handleDelete = async () => {
     if (!deletingInvoice) return;
-    await deleteInvoice(deletingInvoice.id);
-    showToast('Draft invoice deleted');
-    setDeletingInvoice(null);
+    try {
+      await deleteInvoice(deletingInvoice.id);
+      showToast('Draft invoice deleted');
+    } catch (err) {
+      showToast(`Couldn't delete invoice: ${errorMessage(err)}`, 'error');
+    }
   };
 
   const handleDownloadPdf = async (inv: Invoice) => {
@@ -534,8 +569,12 @@ export function InvoicesTab({ propertyId }: Props) {
     const lease = leases.find(l => l.id === inv.leaseId) || null;
     const tenant = lease ? tenants.find(t => t.id === lease.tenantId) || null : null;
     const invPayments = payments.filter(p => p.invoiceId === inv.id && p.status === 'verified');
-    const { downloadInvoicePdf } = await import('../../utils/pdf');
-    downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments });
+    try {
+      const { downloadInvoicePdf } = await import('../../utils/pdf');
+      downloadInvoicePdf({ invoice: inv, property, tenant, lease, payments: invPayments });
+    } catch (err) {
+      showToast(`Couldn't generate PDF: ${errorMessage(err)}`, 'error');
+    }
   };
 
   // Outstanding = remaining balance on sent/partial/overdue invoices

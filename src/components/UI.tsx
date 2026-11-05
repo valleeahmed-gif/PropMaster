@@ -1,4 +1,4 @@
-import React, { ReactNode, useState, useRef } from 'react';
+import React, { ReactNode, useState, useRef, useEffect } from 'react';
 import { X, AlertTriangle, CheckCircle, Info, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Toast } from '../types';
@@ -13,6 +13,14 @@ interface ModalProps {
 }
 
 export function Modal({ open, onClose, title, children, size = 'md' }: ModalProps) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCloseRef.current(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
   if (!open) return null;
   const widths = { sm: 'max-w-sm', md: 'max-w-lg', lg: 'max-w-2xl' };
   return (
@@ -21,10 +29,10 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
       style={{ background: 'rgba(15,18,35,0.55)' }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className={`bg-white w-full ${widths[size]} rounded-t-3xl sm:rounded-2xl shadow-2xl modal-content flex flex-col`} style={{ maxHeight: 'min(92dvh, 92vh)' }}>
+      <div role="dialog" aria-modal="true" aria-label={title} className={`bg-white w-full ${widths[size]} rounded-t-3xl sm:rounded-2xl shadow-2xl modal-content flex flex-col`} style={{ maxHeight: 'min(92dvh, 92vh)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 flex-shrink-0">
           <h2 className="font-semibold text-gray-900 text-base">{title}</h2>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-100 transition-colors">
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-100 transition-colors" aria-label="Close">
             <X size={16} className="text-gray-500" />
           </button>
         </div>
@@ -38,7 +46,8 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
 interface ConfirmProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  /** May return a promise; the dialog stays open (busy) until it settles. */
+  onConfirm: () => void | Promise<unknown>;
   title: string;
   message: string;
   confirmLabel?: string;
@@ -46,17 +55,28 @@ interface ConfirmProps {
 }
 
 export function ConfirmDialog({ open, onClose, onConfirm, title, message, confirmLabel = 'Confirm', danger = false }: ConfirmProps) {
+  const [busy, setBusy] = useState(false);
+  const handleConfirm = async () => {
+    setBusy(true);
+    try {
+      await onConfirm();
+    } finally {
+      setBusy(false);
+      onClose();
+    }
+  };
   return (
-    <Modal open={open} onClose={onClose} title={title} size="sm">
+    <Modal open={open} onClose={busy ? () => {} : onClose} title={title} size="sm">
       <div className="p-6">
         <p className="text-sm text-gray-600 mb-6">{message}</p>
         <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="btn-secondary">Cancel</button>
+          <button onClick={onClose} disabled={busy} className="btn-secondary">Cancel</button>
           <button
-            onClick={() => { onConfirm(); onClose(); }}
+            onClick={handleConfirm}
+            disabled={busy}
             className={danger ? 'btn-danger' : 'btn-primary'}
           >
-            {confirmLabel}
+            {busy ? 'Working…' : confirmLabel}
           </button>
         </div>
       </div>
@@ -183,15 +203,19 @@ interface ToggleProps {
 
 export function Toggle({ checked, onChange, label }: ToggleProps) {
   return (
-    <label className="flex items-center gap-2.5 cursor-pointer select-none">
-      <div
+    <span className="flex items-center gap-2.5 select-none">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
         onClick={() => onChange(!checked)}
-        className={`relative w-10 h-6 rounded-full transition-colors duration-200 ${checked ? 'bg-brand-600' : 'bg-gray-200'}`}
+        className={`relative w-10 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${checked ? 'bg-brand-600' : 'bg-gray-200'}`}
       >
-        <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-4' : ''}`} />
-      </div>
-      {label && <span className="text-sm text-gray-700">{label}</span>}
-    </label>
+        <span className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'translate-x-4' : ''}`} />
+      </button>
+      {label && <span className="text-sm text-gray-700 cursor-pointer" onClick={() => onChange(!checked)}>{label}</span>}
+    </span>
   );
 }
 
@@ -204,6 +228,7 @@ export function StatusBadge({ status, label }: BadgeProps) {
     partial: 'badge-amber',
     overdue: 'badge-red', failed: 'badge-red',
     draft: 'badge-gray', ended: 'badge-gray', open: 'badge-gray', closed: 'badge-gray', none: 'badge-gray',
+    cancelled: 'badge-gray', completed: 'badge-green',
   }[status] || 'badge-gray';
   const labels: Record<string, string> = {
     active: 'Active', paid: 'Paid', verified: 'Verified', resolved: 'Resolved', accepted: 'Accepted', complete: 'Complete',
@@ -211,6 +236,7 @@ export function StatusBadge({ status, label }: BadgeProps) {
     partial: 'Partial',
     overdue: 'Overdue', failed: 'Failed',
     draft: 'Draft', ended: 'Ended', open: 'Open', closed: 'Closed', none: 'Not invited',
+    cancelled: 'Cancelled', completed: 'Completed',
   };
   return <span className={cls}>{label || labels[status] || status}</span>;
 }
@@ -308,7 +334,7 @@ export function FileUpload({ onFile, accept = '.pdf', label = 'Upload PDF' }: Fi
         type="file"
         accept={accept}
         className="hidden"
-        onChange={e => { const f = e.target.files?.[0]; if (f) onFile(f); }}
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) onFile(f); }}
       />
       <div className="text-gray-400 mb-2">
         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="mx-auto">

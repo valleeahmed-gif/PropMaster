@@ -6,7 +6,7 @@ import { CustomerType, LeaseType, RentFrequency } from '../../types';
 import {
   formatCurrency, formatDate, today,
   CUSTOMER_TYPES, LEASE_TYPES, RENT_FREQUENCIES, DUE_DAYS,
-  computeLeaseEndDate, labelFor,
+  computeLeaseEndDate, labelFor, errorMessage,
 } from '../../utils';
 
 interface Props { propertyId: string; }
@@ -36,6 +36,9 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
   const [leaseForm, setLeaseForm] = useState(EMPTY_LEASE_FORM);
   const [createdTenantId, setCreatedTenantId] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  // The tenant row created in step 1, so going Back → Next doesn't create a duplicate.
+  const [createdNewTenant, setCreatedNewTenant] = useState<{ id: string; snapshot: string } | null>(null);
 
   const setT = (k: keyof typeof tenantForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setTenantForm(f => ({ ...f, [k]: e.target.value }));
@@ -51,8 +54,9 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
 
   const availableTenants = tenants.filter(t => t.ownerId === user?.id);
   const existingLeases = leases.filter(l => l.status === 'active');
+  // Tenants not currently on an active lease anywhere in the portfolio.
   const tenantsWithoutLease = availableTenants.filter(t =>
-    !existingLeases.find(l => l.tenantId === t.id && l.propertyId === propertyId)
+    !existingLeases.find(l => l.tenantId === t.id)
   );
 
   const resetForms = () => {
@@ -63,7 +67,9 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
     setShowSecondAddress(false);
     setLeaseForm(EMPTY_LEASE_FORM);
     setCreatedTenantId('');
+    setCreatedNewTenant(null);
     setErrors({});
+    setSaving(false);
   };
 
   const handleClose = () => { onClose(); resetForms(); };
@@ -74,7 +80,8 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
       if (!tenantForm.firstName.trim()) e.firstName = isBusiness ? 'Contact first name required' : 'First name required';
       if (!tenantForm.lastName.trim()) e.lastName = isBusiness ? 'Contact last name required' : 'Last name required';
       if (!tenantForm.email.trim()) e.email = 'Email required';
-      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenantForm.email)) e.email = 'Enter a valid email';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenantForm.email.trim())) e.email = 'Enter a valid email';
+      if (tenantForm.secondaryEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tenantForm.secondaryEmail.trim())) e.secondaryEmail = 'Enter a valid email';
     } else {
       if (!selectedTenantId) e.tenant = 'Select a tenant';
     }
@@ -87,15 +94,24 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
     if (!leaseForm.startDate) e.startDate = 'Start date required';
     if (isFixedTerm && (!leaseForm.durationMonths || Number(leaseForm.durationMonths) <= 0)) e.durationMonths = 'Duration required';
     if (!leaseForm.rentAmount || Number(leaseForm.rentAmount) <= 0) e.rentAmount = 'Valid rent amount required';
-    if (!leaseForm.depositPaid || Number(leaseForm.depositPaid) < 0) e.depositPaid = 'Deposit amount required';
+    if (leaseForm.depositPaid === '' || !(Number(leaseForm.depositPaid) >= 0)) e.depositPaid = 'Deposit amount required (enter 0 if none)';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
 
   const handleNext = async () => {
-    if (!validateTenant()) return;
+    if (!validateTenant() || saving) return;
+    setSaving(true);
     try {
       if (mode === 'new') {
+        const snapshot = JSON.stringify(tenantForm);
+        if (createdNewTenant && createdNewTenant.snapshot === snapshot) {
+          // Already saved this exact tenant — just move on.
+          setCreatedTenantId(createdNewTenant.id);
+          setErrors({});
+          setStep('lease');
+          return;
+        }
         const displayName = `${tenantForm.firstName} ${tenantForm.lastName}`.trim() || tenantForm.email;
         const t = await addTenant({
           customerType: tenantForm.customerType,
@@ -115,6 +131,7 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
           bankBranchCode: tenantForm.bankBranchCode.trim() || undefined,
         });
         setCreatedTenantId(t.id);
+        setCreatedNewTenant({ id: t.id, snapshot });
       } else {
         setCreatedTenantId(selectedTenantId);
       }
@@ -122,11 +139,14 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
       setStep('lease');
     } catch (err: any) {
       showToast(err?.message || 'Failed to save tenant — please try again', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleSave = async () => {
-    if (!validateLease()) return;
+    if (!validateLease() || saving) return;
+    setSaving(true);
     try {
       await addLease({
         propertyId,
@@ -148,6 +168,7 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
         ? 'This property already has an active lease. End it before adding a new one.'
         : err?.message || 'Failed to create lease — please try again';
       showToast(msg, 'error');
+      setSaving(false);
     }
   };
 
@@ -187,7 +208,7 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
                 <Field label="Email address" required error={errors.email}>
                   <input className="input" type="email" value={tenantForm.email} onChange={setT('email')} placeholder="tenant@email.com" />
                 </Field>
-                <Field label="Secondary email address">
+                <Field label="Secondary email address" error={errors.secondaryEmail}>
                   <input className="input" type="email" value={tenantForm.secondaryEmail} onChange={setT('secondaryEmail')} placeholder="alt@email.com" />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
@@ -240,7 +261,7 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
             )}
             <div className="flex gap-3 pt-2">
               <button onClick={handleClose} className="btn-secondary flex-1 justify-center">Cancel</button>
-              <button onClick={handleNext} className="btn-primary flex-1 justify-center">Next: Lease details →</button>
+              <button onClick={handleNext} disabled={saving} className="btn-primary flex-1 justify-center">{saving ? 'Saving…' : 'Next: Lease details →'}</button>
             </div>
           </>
         )}
@@ -294,7 +315,7 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
             </Field>
             <div className="flex gap-3 pt-2">
               <button onClick={() => setStep('tenant')} className="btn-secondary flex-1 justify-center">← Back</button>
-              <button onClick={handleSave} className="btn-primary flex-1 justify-center">Create lease</button>
+              <button onClick={handleSave} disabled={saving} className="btn-primary flex-1 justify-center">{saving ? 'Saving…' : 'Create lease'}</button>
             </div>
           </>
         )}
@@ -393,7 +414,10 @@ export function LeasesTab({ propertyId }: Props) {
       <ConfirmDialog
         open={!!endingLease}
         onClose={() => setEndingLease(null)}
-        onConfirm={() => { endLease(endingLease!); showToast('Lease ended'); setEndingLease(null); }}
+        onConfirm={async () => {
+          try { await endLease(endingLease!); showToast('Lease ended'); }
+          catch (err) { showToast(`Couldn't end lease: ${errorMessage(err)}`, 'error'); }
+        }}
         title="End lease"
         message="This will mark the current lease as ended. The tenant will no longer have access to the tenant portal for this property."
         confirmLabel="End lease"

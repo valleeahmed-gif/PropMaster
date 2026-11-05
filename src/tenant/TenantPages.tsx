@@ -7,7 +7,7 @@ import {
 import { useTenant } from './TenantContext';
 import { Modal, Field, Select, EmptyState } from '../components/UI';
 import { Skeleton } from '../components/Skeleton';
-import { formatCurrency, formatDate, formatMonthYear } from '../utils';
+import { formatCurrency, formatDate, formatMonthYear, daysUntil } from '../utils';
 import { Invoice } from '../types';
 
 // ── Shared micro-components ────────────────────────────────
@@ -109,9 +109,7 @@ export function TenantHomePage() {
     return s + Math.max(i.totalAmount - paid, 0);
   }, 0);
   const openMaintenance = maintenanceRequests.filter(m => m.status === 'open' || m.status === 'in_progress');
-  const daysToLeaseEnd = activeLease.endDate
-    ? Math.ceil((new Date(activeLease.endDate).getTime() - Date.now()) / 86400000)
-    : null;
+  const daysToLeaseEnd = activeLease.endDate ? daysUntil(activeLease.endDate) : null;
 
   return (
     <div className="space-y-5">
@@ -387,7 +385,7 @@ function InvoiceRow({ inv, payments, onDownload }: { inv: Invoice; payments: any
 }
 
 export function TenantInvoicesPage() {
-  const { invoices, payments, tenantRecord, property, activeLease, dataLoading, initialized, loadError, refreshData } = useTenant();
+  const { invoices, payments, tenantRecord, property, activeLease, dataLoading, initialized, loadError, refreshData, showToast } = useTenant();
   const [filter, setFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
 
   if (dataLoading && !initialized) return <ListLoading />;
@@ -407,8 +405,12 @@ export function TenantInvoicesPage() {
 
   const handleDownloadPdf = async (inv: Invoice) => {
     const invPayments = payments.filter(p => p.invoiceId === inv.id);
-    const { downloadInvoicePdf } = await import('../utils/pdf');
-    downloadInvoicePdf({ invoice: inv, property, tenant: tenantRecord, lease: activeLease, payments: invPayments });
+    try {
+      const { downloadInvoicePdf } = await import('../utils/pdf');
+      downloadInvoicePdf({ invoice: inv, property, tenant: tenantRecord, lease: activeLease, payments: invPayments });
+    } catch {
+      showToast("Couldn't generate the PDF — please try again", 'error');
+    }
   };
 
   return (
