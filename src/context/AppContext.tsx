@@ -174,10 +174,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // ── Load all data for logged-in user ──────────────────────
   const refreshData = useCallback(async () => {
-    const { data: { user: sbUser } } = await supabase.auth.getUser();
-    if (!sbUser) return;
+    // Flag loading before the first await so pages opened by deep link show
+    // a loader instead of flashing "not found" while data is on its way.
     setDataLoading(true);
     try {
+      const { data: { user: sbUser } } = await supabase.auth.getUser();
+      if (!sbUser) return;
       const results = await Promise.all([
         supabase.from('properties').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
         supabase.from('tenants').select('*').eq('owner_id', sbUser.id).order('created_at', { ascending: false }),
@@ -270,24 +272,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // and tab-refocus SIGNED_IN events don't re-detect the role and refetch
     // the entire portfolio — that caused periodic full-app re-render jank.
     let loadedUserId: string | null = null;
+    // getSession() and the INITIAL_SESSION event both arrive at startup. The
+    // second caller must wait for the first one's role lookup — otherwise
+    // authLoading clears while user is still null and the route guard sends
+    // a signed-in user to /login (and from there to the dashboard), losing
+    // the page they reloaded.
+    let roleLookup: Promise<void> | null = null;
 
     const applySession = async (s: Session | null) => {
       setSession(s);
       if (!s?.user) {
         loadedUserId = null;
+        roleLookup = null;
         setUser(null);
         setProperties([]); setTenants([]); setLeases([]);
         setPropertyCosts([]); setUtilityBreakdowns([]); setInvoices([]);
         setPayments([]); setMaintenanceRequests([]); setStatementUploads([]);
         return;
       }
-      if (s.user.id === loadedUserId) return; // same user — nothing to reload
-      loadedUserId = s.user.id;
-      const role = await detectRole(s.user);
-      if (role) {
-        setUser({ id: s.user.id, name: s.user.user_metadata?.name || s.user.email || '', email: s.user.email || '', role, createdAt: s.user.created_at });
+      const sbUser = s.user;
+      if (sbUser.id === loadedUserId) { await roleLookup; return; } // same user — nothing to reload
+      loadedUserId = sbUser.id;
+      roleLookup = (async () => {
+        const role = await detectRole(sbUser);
+        if (loadedUserId !== sbUser.id || !role) return;
+        setUser({ id: sbUser.id, name: sbUser.user_metadata?.name || sbUser.email || '', email: sbUser.email || '', role, createdAt: sbUser.created_at });
         if (role === 'landlord') refreshData();
-      }
+      })();
+      await roleLookup;
     };
 
     supabase.auth.getSession().then(async ({ data: { session: s } }) => {

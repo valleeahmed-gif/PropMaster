@@ -290,7 +290,7 @@
       justify-content: center; flex-shrink: 0; margin-top: 1px; font-size: 11px;
     }
 
-    /* ── AI section ── */
+    /* ── Statement reader section ── */
     .ai-section {
       background: linear-gradient(135deg, #002317 0%, #00603b 50%, #007749 100%);
       border-radius: 22px; padding: 64px;
@@ -415,7 +415,7 @@
       <ul class="nav-links-desktop">
         <li><a href="#features">Features</a></li>
         <li><a href="#how-it-works">How it works</a></li>
-        <li><a href="#ai">AI extraction</a></li>
+        <li><a href="#ai">Statement reader</a></li>
         <li><a href="#south-africa">South Africa</a></li>
       </ul>
 
@@ -560,7 +560,7 @@
         <div class="step-num">03</div>
         <div class="step-icon">📊</div>
         <div class="step-title">Log monthly costs</div>
-        <p class="step-desc">Upload your COJ or levy statement. AI extracts the line items automatically. Mark which costs the tenant recovers and which you absorb.</p>
+        <p class="step-desc">Upload your COJ or levy statement. PropMaster reads the charges for you to review. Mark which costs the tenant recovers and which you absorb.</p>
         <div class="step-connector">→</div>
       </div>
       <div class="step fade-up fade-up-delay-3">
@@ -588,23 +588,23 @@
           <li><span class="check">✓</span> Toggle each cost as <strong>Tenant pays</strong> or <strong>Owner pays</strong></li>
           <li><span class="check">✓</span> Recoverable costs auto-populate the next invoice</li>
           <li><span class="check">✓</span> Monthly summaries show total cost vs total recovery</li>
-          <li><span class="check">✓</span> Upload COJ or levy PDF and AI extracts every line item</li>
+          <li><span class="check">✓</span> Upload a COJ or levy statement and the charges are read for you</li>
         </ul>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ── AI Section ── -->
+<!-- ── Statement reader section ── -->
 <section id="ai" style="background: var(--surface); padding: 88px 0;">
   <div class="container">
     <div class="ai-section fade-up">
       <div>
-        <div class="section-eyebrow">AI-powered extraction</div>
-        <h2 class="display section-title">Upload your COJ statement. Claude reads it for you.</h2>
-        <p class="section-sub">COJ accounts and body corporate levies use different layouts every time. Instead of manually typing each line item, upload the PDF. Claude AI extracts electricity, water, refuse, levy and rates automatically.</p>
+        <div class="section-eyebrow">Built-in statement reader</div>
+        <h2 class="display section-title">Upload your COJ statement. PropMaster reads it for you.</h2>
+        <p class="section-sub">Stop typing each line of your municipal account or levy statement. Upload the PDF, a scan or a photo: electricity, water, refuse, rates and levies are read out, checked against the statement total, and shown for you to confirm.</p>
         <div class="ai-pill">
-          <span></span> Powered by Claude AI (Anthropic)
+          <span></span> Read on your device. The file is never uploaded
         </div>
       </div>
       <div class="ai-visual">
@@ -612,7 +612,7 @@
           <div class="ai-visual-dot" style="background:#58c28e"></div>
           <div class="ai-visual-dot" style="background:#ffb81c; margin-left:4px"></div>
           <div class="ai-visual-dot" style="background:#e03c31; margin-left:4px"></div>
-          <div class="ai-visual-title" style="margin-left:8px">Extracted from COJ_Nov2024.pdf</div>
+          <div class="ai-visual-title" style="margin-left:8px">Read from COJ_Nov2026.pdf</div>
         </div>
         <div class="ai-item">
           <div class="ai-item-label">Electricity</div>
@@ -695,7 +695,7 @@
       <div class="sa-card">
         <div class="sa-card-icon">💡</div>
         <div class="sa-card-title">COJ, eThekwini and Cape Town statements</div>
-        <p class="sa-card-desc">The AI extraction understands South African municipal account formats, COJ, eThekwini, City of Cape Town and body corporate levies.</p>
+        <p class="sa-card-desc">The built-in reader is designed for City of Johannesburg accounts, other municipal layouts and body corporate levy statements, in English and Afrikaans. You always review before saving.</p>
       </div>
       <div class="sa-card featured">
         <div class="sa-card-icon">💳</div>
@@ -758,7 +758,7 @@
     </div>
     <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
       <p class="footer-copy">© <span id="footer-year">2026</span> PropMaster. Built for South African landlords.</p>
-      <p class="footer-copy">Powered by Supabase, PayFast and Claude AI</p>
+      <p class="footer-copy">Your statements are read on your own device</p>
     </div>
   </div>
 </footer>

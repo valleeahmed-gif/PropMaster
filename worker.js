@@ -15,11 +15,12 @@ const SUPABASE = 'https://cghiodbvbggizghxuvna.supabase.co';
 const SECURITY_HEADERS = {
   'Content-Security-Policy': [
     "default-src 'self'",
-    "script-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob: https://d8j0ntlcm91z4.cloudfront.net",
     `connect-src 'self' ${SUPABASE} ${SUPABASE.replace('https://', 'wss://')}`,
+    "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

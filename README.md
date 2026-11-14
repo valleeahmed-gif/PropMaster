@@ -1,13 +1,13 @@
 # PropMaster
 
 Property management for South African landlords — properties, tenants,
-leases, invoices, payments, running costs (with AI statement extraction),
-maintenance and reports, plus a tenant portal.
+leases, invoices, payments, running costs (with a built-in municipal / levy
+statement reader), maintenance and reports, plus a tenant portal.
 
 - **Frontend:** React 18 + Vite 7 + Tailwind, two entry points:
   `/` (marketing page, `index.html`) and `/app` (React SPA, `app/index.html`).
 - **Backend:** Supabase (Postgres + Auth + Row Level Security), schema in
-  `supabase/migrations/`, AI extraction edge function in `supabase/functions/`.
+  `supabase/migrations/`.
 - **Hosting:** Cloudflare Workers with static assets (`wrangler.toml`,
   `worker.js`, `public/_headers`).
 
@@ -16,6 +16,7 @@ maintenance and reports, plus a tenant portal.
 ```bash
 npm ci
 npm run dev          # Vite dev server
+npm test             # unit tests (statement reader)
 npm run cf:dev       # production build served by the real Workers runtime
 ```
 
@@ -58,4 +59,27 @@ Migrations live in `supabase/migrations/` and are applied to project
 references are rejected by triggers (see
 `20261104090000_integrity_and_tenant_hardening.sql`).
 
-AI extraction setup: see `DEPLOY-AI-EXTRACTION.md`.
+## Statement reader (no AI)
+
+`src/lib/statements/` reads City of Johannesburg and other municipal
+accounts, and body corporate / HOA levy statements, entirely in the browser:
+
+1. **Text** — `pdf.ts` pulls positioned text out of the PDF with pdf.js.
+   Scanned PDFs and photos go through on-device OCR (`ocr.ts`, Tesseract
+   WebAssembly). Password-protected PDFs prompt for the password.
+2. **Rules** — `parse.ts` finds the charges two ways (CoJ-style service
+   sections, and table / transaction rows), in English and Afrikaans.
+3. **Cross-check** — the result is compared with the statement's own
+   "current charges" / "total due". A mismatch lowers the confidence shown
+   to the user and, where a printed subtotal disagrees with its detail
+   lines, the statement total decides which one is right.
+
+The file never leaves the device; only the confirmed line items are saved.
+Engine files (OCR model, WASM) are copied from `node_modules` into
+`public/vendor/` by `scripts/copy-statement-assets.mjs` before dev/build —
+nothing is fetched from a CDN.
+
+**Adding a layout:** paste the statement's text into
+`src/lib/statements/__tests__/fixtures.ts` (with personal details changed),
+add the expected amounts to `parse.test.ts`, run `npm test`, then adjust
+the keyword rules in `classify.ts` / `parse.ts` until it passes.

@@ -179,7 +179,8 @@ export interface StatementUpload {
   ownerId: string;
   filePath: string;
   fileName: string;
-  extractedData?: ExtractedLineItem[];
+  /** Summary of what was imported. Older rows hold a bare item list. */
+  extractedData?: StatementExtract | ExtractedLineItem[];
   extractionStatus: 'pending' | 'processing' | 'complete' | 'failed';
   propertyCostId?: string;
   uploadedAt: string;
@@ -188,6 +189,19 @@ export interface StatementUpload {
 export interface ExtractedLineItem {
   label: string;
   amount: number;
+}
+
+/** Record of a statement import (the file itself is never stored). */
+export interface StatementExtract {
+  kind: 'municipal' | 'levy' | 'unknown';
+  issuer?: string;
+  accountNumber?: string;
+  statementDate?: string;
+  period?: { month: number; year: number };
+  method: 'text' | 'ocr';
+  confidence: 'high' | 'medium' | 'low';
+  reconciled: boolean | null;
+  items: ExtractedLineItem[];
 }
 
 export interface Toast {
