@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { Modal, ConfirmDialog, EmptyState, StatusBadge, Field, Select } from '../../components/UI';
 import { RecordPaymentModal } from '../../components/RecordPaymentModal';
 import { Invoice, InvoiceLineItem } from '../../types';
+import { dueDateFor, invoiceForMonth } from '../../lib/billing';
 import { formatCurrency, formatDate, formatMonthYear, MONTHS, errorMessage, today } from '../../utils';
 
 // Clean up line items before saving: trim, drop empty rows, round to cents.
@@ -22,7 +23,7 @@ interface Props { propertyId: string; }
 
 // ── Create Invoice Wizard (2-step) ─────────────────────────
 function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: () => void; propertyId: string }) {
-  const { leases, propertyCosts, utilityBreakdowns, addInvoice, showToast } = useApp();
+  const { leases, invoices, propertyCosts, utilityBreakdowns, addInvoice, showToast } = useApp();
 
   const activeLease = leases.find(l => l.propertyId === propertyId && l.status === 'active');
   const now = new Date();
@@ -48,7 +49,7 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
       setStep(1);
       setMonth(now.getMonth() + 1);
       setYear(now.getFullYear());
-      setDueDate('');
+      setDueDate(dueDateFor(now.getMonth() + 1, now.getFullYear(), activeLease?.dueDay));
       setLineItems([]);
       setCostsAdded(false);
     }
@@ -61,6 +62,8 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
       </div>
     </Modal>
   );
+
+  const alreadyInvoiced = invoiceForMonth(invoices, activeLease.id, month, year);
 
   // ── Step 1: Pick month, due date, and which costs to include ──
   const handleNextStep = () => {
@@ -142,15 +145,22 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
 
           <div className="grid grid-cols-3 gap-3">
             <Field label="Month" required>
-              <Select value={month} onChange={e => setMonth(Number(e.target.value))} options={MONTHS.map(m2 => ({ value: m2.value, label: m2.label }))} />
+              <Select value={month} onChange={e => { const m = Number(e.target.value); setMonth(m); setDueDate(dueDateFor(m, year, activeLease.dueDay)); }} options={MONTHS.map(m2 => ({ value: m2.value, label: m2.label }))} />
             </Field>
             <Field label="Year" required>
-              <Select value={year} onChange={e => setYear(Number(e.target.value))} options={years.map(y => ({ value: y, label: String(y) }))} />
+              <Select value={year} onChange={e => { const y = Number(e.target.value); setYear(y); setDueDate(dueDateFor(month, y, activeLease.dueDay)); }} options={years.map(y => ({ value: y, label: String(y) }))} />
             </Field>
             <Field label="Due date" required>
               <input className="input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
             </Field>
           </div>
+
+          {alreadyInvoiced && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800" role="alert">
+              <AlertTriangle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+              <p><span className="font-semibold">{alreadyInvoiced.invoiceNumber}</span> already covers {formatMonthYear(month, year)} for this lease. Creating another will bill the tenant twice.</p>
+            </div>
+          )}
 
           {/* Running costs status for selected month */}
           <div className={`rounded-xl border p-4 ${cost && recoverableBreakdowns.length > 0 ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>

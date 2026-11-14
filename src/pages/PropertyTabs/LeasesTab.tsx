@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, UserPlus } from 'lucide-react';
+import { Plus, UserPlus, FileText } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Modal, ConfirmDialog, EmptyState, StatusBadge, Field, Select } from '../../components/UI';
 import { CustomerType, LeaseType, RentFrequency } from '../../types';
@@ -325,9 +325,27 @@ function NewTenantLeaseModal({ open, onClose, propertyId }: { open: boolean; onC
 }
 
 export function LeasesTab({ propertyId }: Props) {
-  const { leases, tenants, endLease, showToast } = useApp();
+  const { leases, tenants, properties, invoices, payments, endLease, showToast } = useApp();
   const [showAdd, setShowAdd] = useState(false);
   const [endingLease, setEndingLease] = useState<string | null>(null);
+
+  const downloadStatement = async (leaseId: string) => {
+    const lease = leases.find(l => l.id === leaseId);
+    if (!lease) return;
+    try {
+      const { buildAccountStatement } = await import('../../lib/billing');
+      const statement = buildAccountStatement(leaseId, invoices, payments);
+      if (statement.rows.length === 0) { showToast('Nothing to show yet — no invoices have been sent on this lease', 'info'); return; }
+      const { downloadTenantStatementPdf } = await import('../../utils/pdf');
+      downloadTenantStatementPdf({
+        tenantName: tenants.find(t => t.id === lease.tenantId)?.name || 'Tenant',
+        propertyName: properties.find(p => p.id === lease.propertyId)?.name || 'Property',
+        ...statement,
+      });
+    } catch (err) {
+      showToast(`Couldn't create the statement: ${errorMessage(err)}`, 'error');
+    }
+  };
 
   const propertyLeases = leases.filter(l => l.propertyId === propertyId);
   const activeLease = propertyLeases.find(l => l.status === 'active');
@@ -362,8 +380,11 @@ export function LeasesTab({ propertyId }: Props) {
                     <p className="text-xs text-gray-500">{tenant?.email} · {tenant?.phone}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   <StatusBadge status={activeLease.status} />
+                  <button onClick={() => downloadStatement(activeLease.id)} className="btn-secondary text-xs px-3 py-1.5 gap-1.5" title="Every invoice and payment on this lease, with a running balance">
+                    <FileText size={13} /> Statement
+                  </button>
                   <button onClick={() => setEndingLease(activeLease.id)} className="btn-danger text-xs px-3 py-1.5">End lease</button>
                 </div>
               </div>

@@ -596,7 +596,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Next number = highest existing suffix for this year + 1. Counting rows
     // (the old approach) produced duplicates after a delete or across years,
     // which the DB's unique (owner_id, invoice_number) constraint rejects.
-    const maxN = invoices
+    // Read from the ref (not render state) so several invoices created in a
+    // row — bulk monthly invoicing — each get the next number.
+    const maxN = invoicesRef.current
       .filter(i => i.year === data.year)
       .reduce((m, i) => {
         const match = /(\d+)$/.exec(i.invoiceNumber || '');
@@ -611,9 +613,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }).select().single();
     if (error) throw error;
     const inv = mapInvoice(row);
+    invoicesRef.current = [inv, ...invoicesRef.current];
     setInvoices(prev => [inv, ...prev]);
     return inv;
-  }, [user, invoices]);
+  }, [user]);
 
   const updateInvoice = useCallback(async (id: string, data: Partial<Invoice>) => {
     const update: any = {};

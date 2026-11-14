@@ -3,6 +3,7 @@ import { BarChart2, FileText, AlertCircle, Download, TrendingUp, TrendingDown, B
 import { useApp } from '../context/AppContext';
 import { PageHeader, Tabs, StatusBadge } from '../components/UI';
 import { formatCurrency, formatDate, formatMonthYear, MONTHS, monthKey, daysUntil, errorMessage } from '../utils';
+import { taxYearOf, taxYearRange } from '../lib/billing';
 
 // ── CSV export helper ──────────────────────────────────────
 function exportCSV(filename: string, headers: string[], rows: (string | number)[][]) {
@@ -55,7 +56,27 @@ function ProfitLossReport() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   const myProperties = properties.filter(p => p.ownerId === user?.id);
-  const years = [now.getFullYear() - 4, now.getFullYear() - 3, now.getFullYear() - 2, now.getFullYear() - 1, now.getFullYear()];
+  const years = [now.getFullYear() - 4, now.getFullYear() - 3, now.getFullYear() - 2, now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
+
+  // ── Quick ranges ──────────────────────────────────────────
+  const curM = now.getMonth() + 1;
+  const curY = now.getFullYear();
+  const lastM = curM === 1 ? 12 : curM - 1;
+  const lastMY = curM === 1 ? curY - 1 : curY;
+  const thisTaxYear = taxYearOf(curM, curY);
+  const yearAgo = new Date(curY, curM - 12, 1); // first of the month, 11 months back
+  const presets = [
+    { label: 'This month', fromMonth: curM, fromYear: curY, toMonth: curM, toYear: curY },
+    { label: 'Last month', fromMonth: lastM, fromYear: lastMY, toMonth: lastM, toYear: lastMY },
+    { label: 'Last 12 months', fromMonth: yearAgo.getMonth() + 1, fromYear: yearAgo.getFullYear(), toMonth: curM, toYear: curY },
+    { label: `Tax year ${thisTaxYear} (Mar–Feb)`, ...taxYearRange(thisTaxYear) },
+    { label: `Tax year ${thisTaxYear - 1}`, ...taxYearRange(thisTaxYear - 1) },
+  ];
+  const applyPreset = (p: typeof presets[number]) => {
+    setFromMonth(p.fromMonth); setFromYear(p.fromYear); setToMonth(p.toMonth); setToYear(p.toYear);
+  };
+  const isPreset = (p: typeof presets[number]) =>
+    p.fromMonth === fromMonth && p.fromYear === fromYear && p.toMonth === toMonth && p.toYear === toYear;
 
   // ── Auto-correct: if from > to, snap to to the same period ─
   const handleFromMonth = (m: number) => {
@@ -235,7 +256,21 @@ function ProfitLossReport() {
 
       {/* Filters */}
       <div className="card p-4">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Filters</p>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Period</p>
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-4" role="group" aria-label="Quick date ranges">
+          {presets.map(p => (
+            <button
+              key={p.label}
+              onClick={() => applyPreset(p)}
+              aria-pressed={isPreset(p)}
+              className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
+                isPreset(p) ? 'bg-brand-600 text-white' : 'bg-surface-100 text-gray-600 hover:bg-surface-200'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 items-end">
           <div>
             <label className="label">From month</label>

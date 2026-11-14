@@ -11,6 +11,27 @@ statement reader), maintenance and reports, plus a tenant portal.
 - **Hosting:** Cloudflare Workers with static assets (`wrangler.toml`,
   `worker.js`, `public/_headers`).
 
+## What it does
+
+- **Monthly invoice run** — one click creates an invoice for every active
+  lease: rent (monthly / quarterly / half-yearly / yearly) plus that month's
+  recoverable running costs, due on the lease's due day. Already-invoiced
+  leases are skipped, so it is safe to run twice.
+- **Statement reader** — upload a municipal or levy statement and the
+  charges are read on the device and checked against the statement total.
+- **Needs attention** — the dashboard lists overdue invoices, leases not yet
+  invoiced this month, leases about to expire, urgent maintenance and
+  months with no running costs captured.
+- **Reports** — profit & loss, rent roll and outstanding invoices, with
+  quick ranges including the SARS tax year (1 March – end of February);
+  PDF and CSV export.
+- **Account statements** — a PDF of every invoice and payment on a lease
+  with a running balance, for the landlord and in the tenant portal.
+- **Tenant portal** — tenants see their lease, invoices, payments and log
+  maintenance requests.
+
+Billing rules live in `src/lib/billing.ts` (unit-tested).
+
 ## Local development
 
 ```bash

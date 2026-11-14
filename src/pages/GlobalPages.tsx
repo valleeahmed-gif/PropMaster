@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Users, Mail, Phone, Building2, Search, Filter, FileText, CreditCard, Wrench, ChevronRight, Send, Edit2, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Modal, EmptyState, PageHeader, StatusBadge, PriorityBadge, Field, Select } from '../components/UI';
 import { RecordPaymentModal } from '../components/RecordPaymentModal';
 import { UpdateMaintenanceModal } from '../components/UpdateMaintenanceModal';
+import { GenerateInvoicesModal } from '../components/GenerateInvoicesModal';
 import { Tenant } from '../types';
 import { formatCurrency, formatDate, formatMonthYear, errorMessage, today } from '../utils';
 
@@ -241,8 +242,15 @@ export function TenantsPage() {
 export function InvoicesPage() {
   const navigate = useNavigate();
   const { invoices, properties, leases, tenants, payments, updateInvoice, showToast, user } = useApp();
-  const [filter, setFilter] = useState<string>('all');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [filter, setFilter] = useState<string>(searchParams.get('status') || 'all');
   const [payingInvoice, setPayingInvoice] = useState<any>(null);
+  // /invoices?generate=1 opens the monthly run (linked from the dashboard).
+  const [showGenerate, setShowGenerate] = useState(searchParams.get('generate') === '1');
+  const closeGenerate = () => {
+    setShowGenerate(false);
+    if (searchParams.has('generate')) { searchParams.delete('generate'); setSearchParams(searchParams, { replace: true }); }
+  };
 
   const myInvoices = [...invoices.filter(i => i.ownerId === user?.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const filtered = filter === 'all' ? myInvoices : myInvoices.filter(i => i.status === filter);
@@ -280,7 +288,15 @@ export function InvoicesPage() {
 
   return (
     <div>
-      <PageHeader title="Invoices" subtitle={`${myInvoices.length} total`} />
+      <PageHeader
+        title="Invoices"
+        subtitle={`${myInvoices.length} total`}
+        action={
+          <button onClick={() => setShowGenerate(true)} className="btn-primary">
+            <Plus size={16} /> Generate monthly invoices
+          </button>
+        }
+      />
 
       <div className="flex gap-2 overflow-x-auto pb-1 mb-5">
         {filters.map(f => (
@@ -299,7 +315,7 @@ export function InvoicesPage() {
 
       {filtered.length === 0 ? (
         <div className="card">
-          <EmptyState icon={<FileText size={22} />} title="No invoices" description="Invoices are created from the property detail page." action={<button onClick={() => navigate('/properties')} className="btn-primary">Go to properties</button>} />
+          <EmptyState icon={<FileText size={22} />} title="No invoices" description="Generate this month's invoices for all your leases in one go, or create one from a property." action={<button onClick={() => setShowGenerate(true)} className="btn-primary">Generate monthly invoices</button>} />
         </div>
       ) : (
         <div className="card divide-y divide-surface-100">
@@ -314,7 +330,7 @@ export function InvoicesPage() {
                 </div>
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/properties/${inv.propertyId}`)}>
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-gray-900">{inv.invoiceNumber}</p>
+                    <p className="text-sm font-medium text-gray-900 whitespace-nowrap">{inv.invoiceNumber}</p>
                     <StatusBadge status={inv.status} />
                   </div>
                   <p className="text-xs text-gray-500 truncate">{prop?.name} · {formatMonthYear(inv.month, inv.year)}</p>
@@ -357,6 +373,8 @@ export function InvoicesPage() {
         onClose={() => setPayingInvoice(null)}
         invoice={payingInvoice ?? undefined}
       />
+
+      <GenerateInvoicesModal open={showGenerate} onClose={closeGenerate} />
     </div>
   );
 }

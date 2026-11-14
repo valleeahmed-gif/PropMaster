@@ -6,11 +6,12 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StatusBadge, PriorityBadge } from '../components/UI';
-import { formatCurrency, formatDate, monthKey } from '../utils';
+import { formatCurrency, formatDate, formatMonthYear, monthKey, daysUntil } from '../utils';
+import { invoiceForMonth, isRentDue } from '../lib/billing';
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { properties, leases, invoices, payments, maintenanceRequests, tenants, user } = useApp();
+  const { properties, leases, invoices, payments, maintenanceRequests, tenants, propertyCosts, user } = useApp();
 
   // Scope to logged-in landlord
   const myProperties = properties.filter(p => p.ownerId === user?.id);
@@ -41,6 +42,90 @@ export function DashboardPage() {
     .filter(m => m.status === 'open' || m.status === 'in_progress')
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, 4);
+
+  // ── Needs attention ─────────────────────────────────────
+  type Attention = { key: string; tone: 'red' | 'amber' | 'blue'; title: string; detail?: string; action: string; to: string };
+  const attention: Attention[] = [];
+
+  if (overdueInvoices.length > 0) {
+    const overdueTotal = overdueInvoices.reduce((s, i) => {
+      const paid = myPayments.filter(p => p.invoiceId === i.id && p.status === 'verified').reduce((ps, p) => ps + p.amount, 0);
+      return s + Math.max(i.totalAmount - paid, 0);
+    }, 0);
+    attention.push({
+      key: 'overdue', tone: 'red',
+      title: `${overdueInvoices.length} overdue invoice${overdueInvoices.length === 1 ? '' : 's'} — ${formatCurrency(overdueTotal)} outstanding`,
+      detail: 'Follow up with the tenant or record the payment if it has come in.',
+      action: 'View', to: '/invoices?status=overdue',
+    });
+  }
+
+  const uninvoiced = myLeases.filter(l => isRentDue(l, currentMonth, currentYear) && !invoiceForMonth(myInvoices, l.id, currentMonth, currentYear));
+  if (uninvoiced.length > 0) {
+    attention.push({
+      key: 'uninvoiced', tone: 'amber',
+      title: `${uninvoiced.length} lease${uninvoiced.length === 1 ? '' : 's'} not invoiced for ${formatMonthYear(currentMonth, currentYear)}`,
+      detail: uninvoiced.map(l => myProperties.find(p => p.id === l.propertyId)?.name).filter(Boolean).join(' · '),
+      action: 'Generate invoices', to: '/invoices?generate=1',
+    });
+  }
+
+  const urgent = myMaintenance.filter(m => (m.status === 'open' || m.status === 'in_progress') && (m.priority === 'urgent' || m.priority === 'high'));
+  if (urgent.length > 0) {
+    attention.push({
+      key: 'urgent', tone: 'red',
+      title: `${urgent.length} high-priority maintenance request${urgent.length === 1 ? '' : 's'} open`,
+      detail: urgent.slice(0, 3).map(m => m.title).join(' · '),
+      action: 'View', to: '/maintenance',
+    });
+  }
+
+  for (const l of myLeases) {
+    if (!l.endDate) continue;
+    const days = daysUntil(l.endDate);
+    if (days > 90) continue;
+    const name = myProperties.find(p => p.id === l.propertyId)?.name || 'Property';
+    attention.push(days < 0
+      ? {
+          key: `lease-${l.id}`, tone: 'amber',
+          title: `${name}: lease ended ${formatDate(l.endDate)} and is running month to month`,
+          detail: 'Sign a new lease, or end this one if the tenant has moved out.',
+          action: 'Open', to: `/properties/${l.propertyId}`,
+        }
+      : {
+          key: `lease-${l.id}`, tone: days <= 30 ? 'red' : 'amber',
+          title: `${name}: lease ends in ${days} day${days === 1 ? '' : 's'} (${formatDate(l.endDate)})`,
+          detail: l.leaseType === 'fixed_term'
+            ? 'Consumer Protection Act: tell the tenant in writing 40–80 business days before a fixed-term lease expires, with their renewal options.'
+            : undefined,
+          action: 'Open', to: `/properties/${l.propertyId}`,
+        });
+  }
+
+  // Properties that normally have running costs captured but are missing last month's.
+  const prevM = currentMonth === 1 ? 12 : currentMonth - 1;
+  const prevY = currentMonth === 1 ? currentYear - 1 : currentYear;
+  const missingCosts = myProperties.filter(p =>
+    myLeases.some(l => l.propertyId === p.id)
+    && propertyCosts.some(c => c.propertyId === p.id)
+    && !propertyCosts.some(c => c.propertyId === p.id && c.month === prevM && c.year === prevY));
+  if (missingCosts.length > 0) {
+    attention.push({
+      key: 'costs', tone: 'blue',
+      title: `No running costs captured for ${formatMonthYear(prevM, prevY)}`,
+      detail: `${missingCosts.map(p => p.name).join(' · ')} — upload the municipal or levy statement so utilities can be recovered.`,
+      action: 'Open', to: `/properties/${missingCosts[0].id}`,
+    });
+  }
+
+  const drafts = myInvoices.filter(i => i.status === 'draft');
+  if (drafts.length > 0) {
+    attention.push({
+      key: 'drafts', tone: 'blue',
+      title: `${drafts.length} draft invoice${drafts.length === 1 ? '' : 's'} not sent yet`,
+      action: 'Review', to: '/invoices?status=draft',
+    });
+  }
 
   const greeting = now.getHours() < 12 ? 'Good morning' :
                    now.getHours() < 18 ? 'Good afternoon' : 'Good evening';
@@ -99,13 +184,42 @@ export function DashboardPage() {
         />
       </section>
 
+      {/* Needs attention — only what actually needs doing */}
+      {attention.length > 0 && (
+        <section className="mb-8" aria-label="Needs attention">
+          <h2 className="section-title mb-3">Needs attention</h2>
+          <ul className="card divide-y divide-surface-100 overflow-hidden">
+            {attention.map(a => (
+              <li key={a.key}>
+                <button
+                  onClick={() => navigate(a.to)}
+                  className="w-full flex items-start gap-3 px-4 sm:px-5 py-3.5 text-left hover:bg-surface-50 transition-colors"
+                >
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${a.tone === 'red' ? 'bg-red-500' : a.tone === 'amber' ? 'bg-amber-500' : 'bg-brand-500'}`}
+                    aria-hidden="true"
+                  />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-semibold text-ink-900">{a.title}</span>
+                    {a.detail && <span className="block text-xs text-ink-500 mt-0.5">{a.detail}</span>}
+                  </span>
+                  <span className="text-xs font-bold text-brand-700 flex items-center gap-0.5 flex-shrink-0 mt-0.5">
+                    {a.action} <ChevronRight size={13} />
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* Quick actions */}
       <section className="mb-8" aria-label="Quick actions">
         <h2 className="section-title mb-3">Quick actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 stagger">
           {[
             { label: 'Add property',   icon: Building2,  path: '/properties?add=1', bg: 'bg-brand-50',  fg: 'text-brand-700' },
-            { label: 'New invoice',    icon: FileText,   path: '/invoices',    bg: 'bg-brass-50',  fg: 'text-brass-700' },
+            { label: 'Monthly invoices', icon: FileText, path: '/invoices?generate=1', bg: 'bg-brass-50', fg: 'text-brass-700' },
             { label: 'Record payment', icon: CreditCard, path: '/payments',    bg: 'bg-brand-50',  fg: 'text-brand-700' },
             { label: 'Log maintenance',icon: Wrench,     path: '/maintenance', bg: 'bg-amber-50',  fg: 'text-amber-700' },
           ].map(({ label, icon: Icon, path, bg, fg }) => (

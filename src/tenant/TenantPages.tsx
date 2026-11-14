@@ -413,16 +413,39 @@ export function TenantInvoicesPage() {
     }
   };
 
+  const handleDownloadStatement = async () => {
+    if (!activeLease) return;
+    try {
+      const { buildAccountStatement } = await import('../lib/billing');
+      const statement = buildAccountStatement(activeLease.id, invoices, payments);
+      const { downloadTenantStatementPdf } = await import('../utils/pdf');
+      downloadTenantStatementPdf({
+        tenantName: tenantRecord?.name || 'Tenant',
+        propertyName: property?.name || 'Property',
+        ...statement,
+      });
+    } catch {
+      showToast("Couldn't generate the statement — please try again", 'error');
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="page-title-display">Invoices</h1>
-        {outstanding > 0 ? (
-          <p className="text-sm text-amber-700 font-semibold mt-1 tabular">
-            {formatCurrency(outstanding)} outstanding
-          </p>
-        ) : (
-          <p className="text-sm text-ink-500 mt-1">All caught up</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="page-title-display">Invoices</h1>
+          {outstanding > 0 ? (
+            <p className="text-sm text-amber-700 font-semibold mt-1 tabular">
+              {formatCurrency(outstanding)} outstanding
+            </p>
+          ) : (
+            <p className="text-sm text-ink-500 mt-1">All caught up</p>
+          )}
+        </div>
+        {invoices.length > 0 && (
+          <button onClick={handleDownloadStatement} className="btn-secondary text-xs px-3 py-2 gap-1.5 flex-shrink-0">
+            <FileText size={13} /> Statement
+          </button>
         )}
       </div>
 
