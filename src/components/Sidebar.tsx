@@ -39,8 +39,8 @@ export function Sidebar({ mobile }: SidebarProps) {
         <div className="flex items-center gap-2.5">
           <LogoIcon size={36} />
           <div>
-            <p className="font-bold text-white text-[15px] tracking-tight leading-none">PropMaster</p>
-            <p className="text-[10px] text-white/40 tracking-widest uppercase mt-1">Landlord portal</p>
+            <p className="font-display font-bold text-white text-[17px] tracking-tight leading-none">PropMaster</p>
+            <p className="text-[10px] text-brass-500 font-bold tracking-widest uppercase mt-1.5">Landlord portal</p>
           </div>
         </div>
         {mobile && (
@@ -70,7 +70,7 @@ export function Sidebar({ mobile }: SidebarProps) {
             >
               <Icon size={17} strokeWidth={active ? 2.2 : 1.8} />
               <span className="flex-1">{label}</span>
-              {active && <ChevronRight size={14} className="opacity-50" />}
+              {active && <ChevronRight size={14} className="opacity-70" />}
             </button>
           );
         })}
@@ -79,13 +79,12 @@ export function Sidebar({ mobile }: SidebarProps) {
       {/* User footer */}
       <div className="px-3 pt-3 pb-4 border-t border-white/10">
         <div className="flex items-center gap-3 px-2 py-2 mb-2">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
-               style={{ background: 'linear-gradient(135deg, #ffb81c 0%, #a87407 100%)' }}>
-            <span className="text-xs font-bold text-white">{initials}</span>
+          <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-brass-500">
+            <span className="text-xs font-bold text-ink-900">{initials}</span>
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-white truncate">{user?.name}</p>
-            <p className="text-2xs text-white/40 truncate">{user?.email}</p>
+            <p className="text-2xs text-white/50 truncate">{user?.email}</p>
           </div>
         </div>
         <button
@@ -107,16 +106,15 @@ export function MobileSidebarOverlay() {
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 lg:hidden animate-fade-in"
-          style={{ background: 'rgba(3, 36, 31, 0.5)', backdropFilter: 'blur(2px)' }}
+          style={{ background: 'rgba(10, 10, 10, 0.55)', backdropFilter: 'blur(2px)' }}
           onClick={() => setSidebarOpen(false)}
           aria-hidden="true"
         />
       )}
       <div
-        className={`fixed left-0 top-0 bottom-0 w-72 z-50 lg:hidden transition-transform duration-300 ease-out shadow-2xl ${
+        className={`app-sidebar fixed left-0 top-0 bottom-0 w-72 z-50 lg:hidden transition-transform duration-300 ease-out shadow-2xl ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
-        style={{ background: 'linear-gradient(180deg, #004d30 0%, #002317 100%)' }}
         role="dialog"
         aria-label="Navigation menu"
       >

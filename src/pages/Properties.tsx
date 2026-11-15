@@ -19,6 +19,8 @@ interface PropertyFormProps {
   open: boolean;
   onClose: () => void;
   property?: Property;
+  /** Called with the new property after it is created. */
+  onCreated?: (property: Property) => void;
 }
 
 const EMPTY_PROPERTY_FORM = {
@@ -28,7 +30,7 @@ const EMPTY_PROPERTY_FORM = {
   unitNumber: '', erfSize: '',
 };
 
-function PropertyForm({ open, onClose, property }: PropertyFormProps) {
+function PropertyForm({ open, onClose, property, onCreated }: PropertyFormProps) {
   const { addProperty, updateProperty, showToast } = useApp();
   const [form, setForm] = useState(EMPTY_PROPERTY_FORM);
 
@@ -91,9 +93,16 @@ function PropertyForm({ open, onClose, property }: PropertyFormProps) {
     }
     setSaving(true);
     try {
-      if (property) { await updateProperty(property.id, data); showToast('Property updated'); }
-      else { await addProperty(data); showToast('Property added'); }
-      onClose();
+      if (property) {
+        await updateProperty(property.id, data);
+        showToast('Property updated');
+        onClose();
+      } else {
+        const created = await addProperty(data);
+        showToast('Property added — now add the tenant and lease');
+        onClose();
+        onCreated?.(created);
+      }
     } catch (err) {
       showToast(`Couldn't save property: ${errorMessage(err)}`, 'error');
     } finally {
@@ -220,6 +229,11 @@ export function PropertiesPage() {
   const [searchParams] = useSearchParams();
   const { properties, leases, user, tenants } = useApp();
   const [showAdd, setShowAdd] = useState(searchParams.get('add') === '1');
+  // Drop ?add=1 once the form closes so a refresh doesn't reopen it.
+  const closeAdd = () => {
+    setShowAdd(false);
+    if (searchParams.has('add')) navigate('/properties', { replace: true });
+  };
 
   const myProperties = properties.filter(p => p.ownerId === user?.id);
   const activeLeases = leases.filter(l => l.status === 'active');
@@ -288,7 +302,11 @@ export function PropertiesPage() {
         </div>
       )}
 
-      <PropertyForm open={showAdd} onClose={() => setShowAdd(false)} />
+      <PropertyForm
+        open={showAdd}
+        onClose={closeAdd}
+        onCreated={p => navigate(`/properties/${p.id}?tab=leases`, { replace: true })}
+      />
     </div>
   );
 }
@@ -307,7 +325,9 @@ export function PropertyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { properties, leases, tenants, invoices, payments, maintenanceRequests, deleteProperty, showToast, dataLoading } = useApp();
-  const [tab, setTab] = useState('overview');
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const [tab, setTab] = useState(TABS.some(t => t.id === requestedTab) ? requestedTab! : 'overview');
   const [showEdit, setShowEdit] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
 

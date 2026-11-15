@@ -4,8 +4,11 @@ import { Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Field } from '../components/UI';
 import { LogoIcon } from '../components/Logo';
+import { FlagArt, FlagRibbon } from '../components/Brand';
 
 // ── Shared auth shell ──────────────────────────────────────
+// Desktop: black brand panel with the flag motif beside the form.
+// Phone: the motif becomes a banner above the form.
 function AuthShell({ title, subtitle, children, footer }: {
   title: string;
   subtitle: string;
@@ -13,36 +16,73 @@ function AuthShell({ title, subtitle, children, footer }: {
   footer: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex flex-col bg-surface-100">
-      {/* Top brand bar */}
-      <div className="px-4 sm:px-8 py-5">
-        <Link to="/login" className="inline-flex items-center gap-2.5 group">
-          <LogoIcon size={32} />
-          <span className="font-bold text-ink-900 tracking-tight">PropMaster</span>
-        </Link>
-      </div>
+    <div className="min-h-screen flex flex-col bg-white">
+      <FlagRibbon />
+      <div className="flex-1 grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+        {/* Brand panel */}
+        <aside className="hidden lg:flex flex-col bg-flag-black text-white p-10 xl:p-14" aria-hidden="true">
+          <div className="flex items-center gap-3">
+            <LogoIcon size={40} />
+            <span className="font-display font-bold text-xl tracking-tight">PropMaster</span>
+          </div>
+          <div className="relative flex-1 my-10 min-h-[220px] -mr-10 xl:-mr-14 overflow-hidden">
+            <FlagArt className="absolute inset-0 w-full h-full" preserveAspectRatio="xMinYMid meet" />
+          </div>
+          <div>
+            <p className="font-display text-4xl xl:text-5xl font-bold leading-[1.05] tracking-tight">
+              Rent, costs and tenants.<br />
+              <span className="text-brass-500">All in one place.</span>
+            </p>
+            <ul className="mt-6 space-y-2.5 text-sm text-white/75">
+              {[
+                ['bg-brand-500', 'Invoice every lease in one click'],
+                ['bg-brass-500', 'Read municipal and levy statements automatically'],
+                ['bg-red-500', 'See overdue rent the moment it happens'],
+                ['bg-blue-500', 'Give tenants their own portal'],
+              ].map(([dot, text]) => (
+                <li key={text} className="flex items-center gap-3">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${dot}`} />
+                  {text}
+                </li>
+              ))}
+            </ul>
+          </div>
+        </aside>
 
-      {/* Centered auth card */}
-      <div className="flex-1 flex items-center justify-center px-4 pb-12">
-        <div className="w-full max-w-md page-enter">
-          <div className="text-center mb-6">
-            <h1 className="font-display text-3xl text-ink-900 tracking-tight">{title}</h1>
-            <p className="text-sm text-ink-500 mt-2">{subtitle}</p>
+        {/* Form side */}
+        <div className="flex flex-col bg-surface-100 lg:bg-white">
+          {/* Phone banner */}
+          <div className="lg:hidden bg-flag-black text-white">
+            <div className="relative h-28 overflow-hidden">
+              <FlagArt className="absolute inset-0 w-full h-full" preserveAspectRatio="xMaxYMid slice" />
+              <Link to="/login" className="absolute left-4 top-1/2 -translate-y-1/2 inline-flex items-center gap-2.5 bg-flag-black/85 rounded-xl pl-1.5 pr-3.5 py-1.5">
+                <LogoIcon size={32} />
+                <span className="font-display font-bold tracking-tight">PropMaster</span>
+              </Link>
+            </div>
           </div>
 
-          <div className="card p-6 sm:p-7 shadow-md">
-            {children}
+          <div className="flex-1 flex items-center justify-center px-4 py-10">
+            <div className="w-full max-w-md page-enter">
+              <div className="mb-7">
+                <h1 className="font-display text-3xl sm:text-4xl font-bold text-ink-900 tracking-tight">{title}</h1>
+                <p className="text-sm text-ink-500 mt-2">{subtitle}</p>
+              </div>
+
+              <div className="card p-6 sm:p-7 shadow-md lg:shadow-none lg:border-0 lg:p-0 lg:bg-transparent">
+                {children}
+              </div>
+
+              <p className="text-sm text-ink-500 mt-6">{footer}</p>
+            </div>
           </div>
 
-          <p className="text-center text-sm text-ink-500 mt-5">{footer}</p>
+          <div className="pb-6 px-4 text-center lg:text-left lg:px-0 lg:max-w-md lg:mx-auto lg:w-full">
+            <p className="text-2xs text-ink-400 tracking-wide">
+              Property management for South African landlords · ZAR
+            </p>
+          </div>
         </div>
-      </div>
-
-      {/* Subtle footer */}
-      <div className="text-center pb-6 px-4">
-        <p className="text-2xs text-ink-400 tracking-wide">
-          Property management for South African landlords · ZAR
-        </p>
       </div>
     </div>
   );

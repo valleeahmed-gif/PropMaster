@@ -5,6 +5,7 @@ import { Sidebar, MobileSidebarOverlay } from './Sidebar';
 import { LogoIcon } from './Logo';
 import { ToastContainer } from './UI';
 import { BottomNav } from './BottomNav';
+import { FlagRibbon } from './Brand';
 import { useApp } from '../context/AppContext';
 
 interface LayoutProps { children: ReactNode; }
@@ -32,14 +33,15 @@ export function Layout({ children }: LayoutProps) {
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface-100">
+    <div className="flex flex-col h-screen overflow-hidden bg-surface-100">
       {/* Skip link for keyboard users */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
+      <FlagRibbon />
 
+      <div className="flex flex-1 min-h-0">
       {/* Desktop sidebar */}
       <aside
-        className="hidden lg:flex flex-col w-64 flex-shrink-0"
-        style={{ background: 'linear-gradient(180deg, #004d30 0%, #002317 100%)' }}
+        className="app-sidebar hidden lg:flex flex-col w-64 flex-shrink-0"
         aria-label="Sidebar navigation"
       >
         <Sidebar />
@@ -60,7 +62,7 @@ export function Layout({ children }: LayoutProps) {
           </button>
           <div className="flex items-center gap-2">
             <LogoIcon size={28} />
-            <span className="font-bold text-ink-900 text-sm tracking-tight">PropMaster</span>
+            <span className="font-display font-bold text-ink-900 text-base tracking-tight">PropMaster</span>
           </div>
           <button
             onClick={() => navigate('/maintenance')}
@@ -70,7 +72,7 @@ export function Layout({ children }: LayoutProps) {
             <Bell size={19} className="text-ink-700" />
             {notificationCount > 0 && (
               <span
-                className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-red-500 rounded-full text-white text-[9px] font-bold flex items-center justify-center"
+                className="absolute top-1 right-1 min-w-[16px] h-4 px-1 bg-red-500 ring-2 ring-white rounded-full text-white text-[9px] font-bold flex items-center justify-center"
                 aria-hidden="true"
               >
                 {notificationCount > 9 ? '9+' : notificationCount}
@@ -83,7 +85,7 @@ export function Layout({ children }: LayoutProps) {
         {!isOnline && (
           <div
             role="alert"
-            className="bg-amber-500 text-white text-xs font-semibold px-4 py-2 flex items-center gap-2 justify-center flex-shrink-0"
+            className="bg-brass-500 text-ink-900 text-xs font-bold px-4 py-2 flex items-center gap-2 justify-center flex-shrink-0"
           >
             <WifiOff size={13} />
             You're offline — changes won't save until you reconnect
@@ -103,6 +105,7 @@ export function Layout({ children }: LayoutProps) {
             {children}
           </div>
         </main>
+      </div>
       </div>
 
       <ToastContainer />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildInvoiceDraft, dueDateFor, invoiceForMonth, isRentDue, leaseCoversMonth, taxYearOf, taxYearRange } from '../billing';
+import { buildInvoiceDraft, dueDateFor, dueDateForLease, invoiceForMonth, isRentDue, leaseCoversMonth, taxYearOf, taxYearRange } from '../billing';
 import { Invoice, Lease, PropertyCost, UtilityBreakdown } from '../../types';
 
 const lease = (over: Partial<Lease> = {}): Lease => ({
@@ -15,6 +15,16 @@ describe('dueDateFor', () => {
     expect(dueDateFor(2, 2028, 30)).toBe('2028-02-29');
   });
   it('defaults to the 1st', () => expect(dueDateFor(6, 2026)).toBe('2026-06-01'));
+});
+
+describe('dueDateForLease', () => {
+  it('is not before the lease start in its first month', () => {
+    expect(dueDateForLease({ dueDay: 1, startDate: '2026-11-15' }, 11, 2026)).toBe('2026-11-15');
+  });
+  it('uses the due day from the second month on', () => {
+    expect(dueDateForLease({ dueDay: 1, startDate: '2026-11-15' }, 12, 2026)).toBe('2026-12-01');
+    expect(dueDateForLease({ dueDay: 25, startDate: '2026-11-15' }, 11, 2026)).toBe('2026-11-25');
+  });
 });
 
 describe('lease coverage and rent frequency', () => {

@@ -4,6 +4,7 @@ import { Home, FileText, CreditCard, Wrench, LogOut, WifiOff } from 'lucide-reac
 import { useTenant } from './TenantContext';
 import { LogoIcon } from '../components/Logo';
 import { ToastContainer } from '../components/UI';
+import { FlagRibbon } from '../components/Brand';
 
 const TENANT_NAV = [
   { path: '/tenant/home',        label: 'Home',        icon: Home },
@@ -96,6 +97,7 @@ export function TenantLayout({ children }: TenantLayoutProps) {
     <div className="min-h-screen bg-surface-100">
       {/* Skip link */}
       <a href="#tenant-content" className="skip-link">Skip to content</a>
+      <FlagRibbon />
 
       {/* Header */}
       <header
@@ -106,7 +108,7 @@ export function TenantLayout({ children }: TenantLayoutProps) {
           <div className="flex items-center gap-2.5 min-w-0">
             <LogoIcon size={30} />
             <div className="min-w-0">
-              <p className="text-sm font-bold text-ink-900 leading-tight tracking-tight">PropMaster</p>
+              <p className="font-display text-base font-bold text-ink-900 leading-tight tracking-tight">PropMaster</p>
               {property && (
                 <p className="text-2xs text-ink-400 leading-tight truncate max-w-[180px]">
                   {property.name}
@@ -116,11 +118,10 @@ export function TenantLayout({ children }: TenantLayoutProps) {
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <div
-              className="w-9 h-9 rounded-full flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #ffb81c 0%, #a87407 100%)' }}
+              className="w-9 h-9 rounded-full flex items-center justify-center bg-brass-500"
               aria-label={`Signed in as ${user?.name}`}
             >
-              <span className="text-xs font-bold text-white">{initials}</span>
+              <span className="text-xs font-bold text-ink-900">{initials}</span>
             </div>
             <button
               onClick={handleLogout}
@@ -137,7 +138,7 @@ export function TenantLayout({ children }: TenantLayoutProps) {
       {!isOnline && (
         <div
           role="alert"
-          className="bg-amber-500 text-white text-xs font-semibold px-4 py-2 flex items-center gap-2 justify-center"
+          className="bg-brass-500 text-ink-900 text-xs font-bold px-4 py-2 flex items-center gap-2 justify-center"
         >
           <WifiOff size={13} /> You're offline
         </div>

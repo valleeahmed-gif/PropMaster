@@ -18,7 +18,7 @@ const SECURITY_HEADERS = {
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    "img-src 'self' data: blob: https://d8j0ntlcm91z4.cloudfront.net",
+    "img-src 'self' data: blob:",
     `connect-src 'self' ${SUPABASE} ${SUPABASE.replace('https://', 'wss://')}`,
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",

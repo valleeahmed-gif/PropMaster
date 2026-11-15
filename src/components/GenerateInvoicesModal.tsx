@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle, FileText } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Modal, Select } from './UI';
-import { buildInvoiceDraft, dueDateFor, invoiceForMonth } from '../lib/billing';
+import { buildInvoiceDraft, dueDateForLease, invoiceForMonth } from '../lib/billing';
 import { errorMessage, formatCurrency, formatDate, formatMonthYear, MONTHS, today } from '../utils';
 
 interface Props {
@@ -43,7 +43,7 @@ export function GenerateInvoicesModal({ open, onClose }: Props) {
       const tenant = tenants.find(t => t.id === lease.tenantId);
       const existing = invoiceForMonth(invoices, lease.id, month, year);
       const draft = buildInvoiceDraft(lease, month, year, propertyCosts, utilityBreakdowns);
-      const dueDate = dueDateFor(month, year, lease.dueDay);
+      const dueDate = dueDateForLease(lease, month, year);
       let skip: string | null = null;
       if (existing) skip = `Already invoiced (${existing.invoiceNumber})`;
       else if (draft.lineItems.length === 0) skip = draft.rentIncluded ? 'Nothing to bill' : 'No rent due this month';

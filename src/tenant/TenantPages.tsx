@@ -7,6 +7,7 @@ import {
 import { useTenant } from './TenantContext';
 import { Modal, Field, Select, EmptyState } from '../components/UI';
 import { Skeleton } from '../components/Skeleton';
+import { FlagArt } from '../components/Brand';
 import { formatCurrency, formatDate, formatMonthYear, daysUntil } from '../utils';
 import { Invoice } from '../types';
 
@@ -152,7 +153,7 @@ export function TenantHomePage() {
       <div className="grid grid-cols-3 gap-3 stagger">
         <StatTile
           label="Monthly rent"
-          value={formatCurrency(activeLease.rentAmount)}
+          value={formatCurrency(activeLease.rentAmount).replace(/[.,]00$/, '')}
           icon={<CreditCard size={15} />}
           bg="bg-brand-50"
           fg="text-brand-700"
@@ -206,20 +207,18 @@ function WelcomeCard({ name, property }: { name: string; property: any }) {
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   return (
-    <div
-      className="rounded-2xl p-6 text-white relative overflow-hidden shadow-md"
-      style={{ background: 'linear-gradient(135deg, #004d30 0%, #002317 100%)' }}
-    >
+    <div className="hero-panel shadow-md">
       <div
-        className="absolute top-0 right-0 w-40 h-40 opacity-10 pointer-events-none"
-        style={{ background: 'radial-gradient(circle at center, white 0%, transparent 70%)' }}
-        aria-hidden="true"
-      />
-      <div className="relative">
-        <p className="text-2xs font-bold text-brass-300 uppercase tracking-widest mb-2">
+        className="absolute inset-y-0 right-0 w-[38%] pointer-events-none"
+        style={{ WebkitMaskImage: 'linear-gradient(90deg, transparent, #000 55%)', maskImage: 'linear-gradient(90deg, transparent, #000 55%)' }}
+      >
+        <FlagArt className="w-full h-full" />
+      </div>
+      <div className="relative p-6 max-w-[78%]">
+        <p className="text-2xs font-bold text-brass-500 uppercase tracking-widest mb-2">
           {greeting}
         </p>
-        <p className="font-display text-2xl mb-4 tracking-tight">{name.split(' ')[0]}</p>
+        <p className="font-display text-3xl font-bold mb-4 tracking-tight">{name.split(' ')[0]}</p>
         {property ? (
           <div className="flex items-start gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">

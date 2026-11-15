@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, CheckCircle, Repeat, Sparkles } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Select, Toggle } from '../../components/UI';
 import { StatementImport } from '../../components/StatementImport';
@@ -54,8 +54,8 @@ function BreakdownRow({ bd, onUpdate, onDelete }: {
                 {bd.isRecoverable ? '↑ Tenant pays' : '↓ Owner pays'}
               </span>
               {bd.isRecurring && (
-                <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-brand-50 text-brand-700 flex-shrink-0">
-                  🔁 Recurring
+                <span className="inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium bg-blue-50 text-blue-900 flex-shrink-0">
+                  <Repeat size={11} /> Recurring
                 </span>
               )}
             </div>
@@ -67,13 +67,15 @@ function BreakdownRow({ bd, onUpdate, onDelete }: {
           <button
             onClick={() => onUpdate(bd.id, { isRecurring: !bd.isRecurring })}
             title={bd.isRecurring ? 'Recurring monthly — click to disable' : 'Click to make recurring monthly'}
-            className={`p-1.5 rounded-lg transition-colors flex-shrink-0 text-sm ${
+            aria-label={bd.isRecurring ? 'Recurring monthly — click to disable' : 'Make recurring monthly'}
+            aria-pressed={bd.isRecurring}
+            className={`p-1.5 rounded-lg transition-colors flex-shrink-0 ${
               bd.isRecurring
-                ? 'bg-brand-50 text-brand-600 hover:bg-brand-100'
+                ? 'bg-blue-50 text-blue-900 hover:bg-blue-100'
                 : 'bg-gray-50 text-gray-300 hover:bg-gray-100 hover:text-gray-500'
             }`}
           >
-            🔁
+            <Repeat size={15} />
           </button>
           <button onClick={() => setEditing(true)} className="p-1.5 rounded-lg hover:bg-surface-100 text-gray-400 hover:text-gray-600 flex-shrink-0 text-xs">
             Edit
@@ -237,11 +239,11 @@ export function CostsTab({ propertyId }: Props) {
       </div>
 
       {/* Recurring explanation */}
-      <div className="flex items-start gap-3 px-4 py-3 bg-brand-50 rounded-xl border border-brand-100">
-        <span className="text-base flex-shrink-0 mt-0.5">🔁</span>
+      <div className="flex items-start gap-3 px-4 py-3 bg-blue-50 rounded-xl border border-blue-100">
+        <Repeat size={16} className="text-blue-900 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-xs font-semibold text-brand-900 mb-0.5">Recurring costs</p>
-          <p className="text-xs text-brand-700 leading-relaxed">
+          <p className="text-xs font-semibold text-blue-900 mb-0.5">Recurring costs</p>
+          <p className="text-xs text-blue-900/80 leading-relaxed">
             Mark fixed monthly costs like <strong>levy</strong> or <strong>body corporate</strong> as recurring.
             When you open a new month, click <strong>Copy recurring items</strong> to auto-fill them — no re-entering needed. Variable costs like electricity should not be marked recurring.
           </p>
@@ -251,7 +253,7 @@ export function CostsTab({ propertyId }: Props) {
       {/* Auto-populate banner — shown when this month is empty but previous has recurring */}
       {canAutoPopulate && (
         <div className="flex items-center gap-3 px-4 py-3.5 bg-green-50 rounded-xl border border-green-200">
-          <span className="text-lg flex-shrink-0">✨</span>
+          <Sparkles size={18} className="text-green-700 flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-green-900">
               {prevRecurringItems.length} recurring item{prevRecurringItems.length !== 1 ? 's' : ''} from {formatMonthYear(prevMonth, prevYear)} available
@@ -268,7 +270,7 @@ export function CostsTab({ propertyId }: Props) {
             {autoPopulating ? (
               <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Copying…</>
             ) : (
-              <>🔁 Copy recurring items</>
+              <><Repeat size={13} /> Copy recurring items</>
             )}
           </button>
         </div>
@@ -364,8 +366,8 @@ export function CostsTab({ propertyId }: Props) {
               </div>
               <div className="flex items-center gap-1.5">
                 <Toggle checked={newRecurring} onChange={setNewRecurring} />
-                <span className={`text-xs font-medium ${newRecurring ? 'text-brand-700' : 'text-gray-400'}`}>
-                  🔁 Recurring monthly
+                <span className={`text-xs font-medium ${newRecurring ? 'text-blue-900' : 'text-gray-400'}`}>
+                  Recurring monthly
                 </span>
               </div>
               <button

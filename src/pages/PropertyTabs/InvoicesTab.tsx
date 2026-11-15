@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { Modal, ConfirmDialog, EmptyState, StatusBadge, Field, Select } from '../../components/UI';
 import { RecordPaymentModal } from '../../components/RecordPaymentModal';
 import { Invoice, InvoiceLineItem } from '../../types';
-import { dueDateFor, invoiceForMonth } from '../../lib/billing';
+import { dueDateFor, dueDateForLease, invoiceForMonth } from '../../lib/billing';
 import { formatCurrency, formatDate, formatMonthYear, MONTHS, errorMessage, today } from '../../utils';
 
 // Clean up line items before saving: trim, drop empty rows, round to cents.
@@ -49,7 +49,7 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
       setStep(1);
       setMonth(now.getMonth() + 1);
       setYear(now.getFullYear());
-      setDueDate(dueDateFor(now.getMonth() + 1, now.getFullYear(), activeLease?.dueDay));
+      setDueDate(activeLease ? dueDateForLease(activeLease, now.getMonth() + 1, now.getFullYear()) : dueDateFor(now.getMonth() + 1, now.getFullYear()));
       setLineItems([]);
       setCostsAdded(false);
     }
@@ -145,10 +145,10 @@ function InvoiceWizard({ open, onClose, propertyId }: { open: boolean; onClose: 
 
           <div className="grid grid-cols-3 gap-3">
             <Field label="Month" required>
-              <Select value={month} onChange={e => { const m = Number(e.target.value); setMonth(m); setDueDate(dueDateFor(m, year, activeLease.dueDay)); }} options={MONTHS.map(m2 => ({ value: m2.value, label: m2.label }))} />
+              <Select value={month} onChange={e => { const m = Number(e.target.value); setMonth(m); setDueDate(dueDateForLease(activeLease, m, year)); }} options={MONTHS.map(m2 => ({ value: m2.value, label: m2.label }))} />
             </Field>
             <Field label="Year" required>
-              <Select value={year} onChange={e => { const y = Number(e.target.value); setYear(y); setDueDate(dueDateFor(month, y, activeLease.dueDay)); }} options={years.map(y => ({ value: y, label: String(y) }))} />
+              <Select value={year} onChange={e => { const y = Number(e.target.value); setYear(y); setDueDate(dueDateForLease(activeLease, month, y)); }} options={years.map(y => ({ value: y, label: String(y) }))} />
             </Field>
             <Field label="Due date" required>
               <input className="input" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />

@@ -399,7 +399,7 @@ function ProfitLossReport() {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-900 leading-tight truncate">{row.property.name}</p>
-                        <p className="text-xs text-gray-400">{row.paymentCount} payments</p>
+                        <p className="text-xs text-gray-400">{row.paymentCount} payment{row.paymentCount === 1 ? '' : 's'}</p>
                       </div>
                       {expanded
                         ? <ChevronUp size={14} className="text-gray-400 ml-auto sm:hidden flex-shrink-0" />

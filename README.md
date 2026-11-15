@@ -32,6 +32,17 @@ statement reader), maintenance and reports, plus a tenant portal.
 
 Billing rules live in `src/lib/billing.ts` (unit-tested).
 
+## Design
+
+The interface is built from the six colours of the South African flag —
+black for structure, green for primary actions, gold for highlights, red
+for overdue and danger, blue for information, white for surfaces. The
+scales live in `tailwind.config.js` (Tailwind's `green`, `amber`, `gray`,
+`red` and `blue` are remapped to them, so every screen stays on palette).
+`src/components/Brand.tsx` holds the two signature elements: the
+`FlagRibbon` stripe and `FlagArt`, an abstract motif of the flag's
+converging bands. Fonts: Bricolage Grotesque (headings) and DM Sans.
+
 ## Local development
 
 ```bash

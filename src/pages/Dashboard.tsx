@@ -6,12 +6,13 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StatusBadge, PriorityBadge } from '../components/UI';
+import { FlagArt } from '../components/Brand';
 import { formatCurrency, formatDate, formatMonthYear, monthKey, daysUntil } from '../utils';
 import { invoiceForMonth, isRentDue } from '../lib/billing';
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { properties, leases, invoices, payments, maintenanceRequests, tenants, propertyCosts, user } = useApp();
+  const { properties, leases, invoices, payments, maintenanceRequests, tenants, propertyCosts, user, dataLoading } = useApp();
 
   // Scope to logged-in landlord
   const myProperties = properties.filter(p => p.ownerId === user?.id);
@@ -127,33 +128,117 @@ export function DashboardPage() {
     });
   }
 
+  const monthlyRentRoll = myLeases.filter(l => l.rentFrequency === 'monthly').reduce((sum, l) => sum + l.rentAmount, 0);
+
+  // ── Getting started ─────────────────────────────────────
+  const firstVacant = vacantProperties[0] ?? myProperties[0];
+  const setupSteps = [
+    { title: 'Add a property', detail: 'Name and address is all you need.', done: myProperties.length > 0, to: '/properties?add=1' },
+    { title: 'Add the tenant and lease', detail: 'Rent, deposit and due day.', done: leases.some(l => l.ownerId === user?.id), to: firstVacant ? `/properties/${firstVacant.id}?tab=leases` : '/properties?add=1' },
+    { title: 'Send the first invoice', detail: 'One click for every lease.', done: myInvoices.some(i => i.status !== 'draft'), to: '/invoices?generate=1' },
+    { title: 'Record a payment', detail: 'Mark rent as received.', done: myPayments.length > 0, to: '/invoices' },
+  ];
+  const setupDone = setupSteps.filter(st => st.done).length;
+  const showSetup = !dataLoading && setupDone < setupSteps.length;
+
   const greeting = now.getHours() < 12 ? 'Good morning' :
                    now.getHours() < 18 ? 'Good afternoon' : 'Good evening';
 
   return (
     <div>
-      {/* Hero greeting — distinctive, sets the tone */}
-      <section className="mb-6 sm:mb-8">
-        <p className="text-xs font-bold text-brand-700 uppercase tracking-widest mb-2">
-          {now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
-        </p>
-        <h1 className="font-display text-3xl sm:text-4xl text-ink-900 tracking-tight leading-[1.05]">
-          {greeting}, <em className="text-brand-700">{user?.name?.split(' ')[0]}</em>.
-        </h1>
-        <p className="text-sm sm:text-base text-ink-500 mt-2 max-w-xl">
-          Here's how your portfolio is performing today.
-        </p>
+      {/* Hero — black field with the converging flag bands */}
+      <section className="hero-panel mb-5 sm:mb-6">
+        <div
+          className="absolute inset-y-0 right-0 w-[44%] hidden md:block"
+          style={{ WebkitMaskImage: 'linear-gradient(90deg, transparent, #000 42%)', maskImage: 'linear-gradient(90deg, transparent, #000 42%)' }}
+        >
+          <FlagArt className="w-full h-full" />
+        </div>
+        <div className="relative p-6 sm:p-8 md:max-w-[62%]">
+          <p className="text-xs font-bold text-brass-500 uppercase tracking-widest mb-2">
+            {now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+          </p>
+          <h1 className="font-display text-3xl sm:text-4xl font-bold tracking-tight leading-[1.05]">
+            {greeting}, {user?.name?.split(' ')[0]}.
+          </h1>
+          <p className="text-sm sm:text-base text-white/70 mt-2">
+            {myProperties.length === 0
+              ? "Let's get your first property set up."
+              : `${myProperties.length} ${myProperties.length === 1 ? 'property' : 'properties'} · ${myLeases.length} active ${myLeases.length === 1 ? 'lease' : 'leases'} · ${formatCurrency(monthlyRentRoll)} monthly rent roll`}
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2.5">
+            {myLeases.length > 0 ? (
+              <button onClick={() => navigate('/invoices?generate=1')} className="btn-gold">
+                <FileText size={16} /> Generate monthly invoices
+              </button>
+            ) : (
+              <button onClick={() => navigate('/properties?add=1')} className="btn-gold">
+                <Building2 size={16} /> Add a property
+              </button>
+            )}
+            <button
+              onClick={() => navigate('/reports')}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              View reports <ArrowUpRight size={15} />
+            </button>
+          </div>
+        </div>
+        <div className="flag-ribbon md:hidden" />
       </section>
 
-      {/* Headline stats — 2x2 mobile, 4 desktop */}
+      {/* Getting started — until the first rent has been collected */}
+      {showSetup && (
+        <section className="card p-5 sm:p-6 mb-6" aria-label="Getting started">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h2 className="font-display text-lg font-bold text-ink-900">Get set up</h2>
+              <p className="text-sm text-ink-500">{setupDone} of {setupSteps.length} done</p>
+            </div>
+            <div className="flex gap-1" aria-hidden="true">
+              {setupSteps.map((st, i) => (
+                <span key={i} className={`h-1.5 w-7 rounded-full ${st.done ? 'bg-brand-600' : 'bg-surface-200'}`} />
+              ))}
+            </div>
+          </div>
+          <ol className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            {setupSteps.map((st, i) => {
+              const isNext = !st.done && setupSteps.findIndex(x => !x.done) === i;
+              return (
+                <li key={st.title}>
+                  <button
+                    onClick={() => navigate(st.to)}
+                    disabled={st.done}
+                    className={`w-full h-full text-left rounded-xl border p-4 transition-colors ${
+                      st.done ? 'border-surface-200 bg-surface-50'
+                      : isNext ? 'border-brand-600 bg-brand-50 hover:bg-brand-100'
+                      : 'border-surface-200 hover:border-surface-300'
+                    }`}
+                  >
+                    <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold mb-2 ${
+                      st.done ? 'bg-brand-600 text-white' : isNext ? 'bg-ink-900 text-white' : 'bg-surface-200 text-ink-500'
+                    }`}>
+                      {st.done ? '✓' : i + 1}
+                    </span>
+                    <span className={`block text-sm font-semibold ${st.done ? 'text-ink-400 line-through' : 'text-ink-900'}`}>{st.title}</span>
+                    <span className="block text-xs text-ink-500 mt-0.5">{st.detail}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+
+      {/* Headline stats — one flag colour each */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 stagger" aria-label="Portfolio summary">
         <StatTile
           label="Properties"
           value={String(myProperties.length)}
-          sub={vacantProperties.length > 0 ? `${vacantProperties.length} vacant` : 'All occupied'}
-          subTone={vacantProperties.length > 0 ? 'amber' : 'green'}
+          sub={myProperties.length === 0 ? 'None added yet' : vacantProperties.length > 0 ? `${vacantProperties.length} vacant` : 'All occupied'}
+          subTone={myProperties.length === 0 ? undefined : vacantProperties.length > 0 ? 'amber' : 'green'}
           icon={<Building2 size={18} />}
-          iconBg="bg-brand-50 text-brand-700"
+          accent="blue"
           onClick={() => navigate('/properties')}
         />
         <StatTile
@@ -161,7 +246,7 @@ export function DashboardPage() {
           value={String(myLeases.length)}
           sub={`${myTenants.length} ${myTenants.length === 1 ? 'tenant' : 'tenants'}`}
           icon={<Users size={18} />}
-          iconBg="bg-brand-50 text-brand-700"
+          accent="green"
           onClick={() => navigate('/tenants')}
         />
         <StatTile
@@ -169,17 +254,16 @@ export function DashboardPage() {
           value={formatCurrency(rentThisMonth)}
           sub={paymentsThisMonth.length > 0 ? `${paymentsThisMonth.length} payment${paymentsThisMonth.length === 1 ? '' : 's'}` : 'No payments yet'}
           icon={<TrendingUp size={18} />}
-          iconBg="bg-brass-50 text-brass-700"
-          highlight
+          accent="gold"
           onClick={() => navigate('/payments')}
         />
         <StatTile
           label="Outstanding"
           value={formatCurrency(totalOutstanding)}
-          sub={overdueInvoices.length > 0 ? `${overdueInvoices.length} overdue` : `${sentInvoices.length} pending`}
-          subTone={overdueInvoices.length > 0 ? 'red' : 'amber'}
+          sub={overdueInvoices.length > 0 ? `${overdueInvoices.length} overdue` : sentInvoices.length > 0 ? `${sentInvoices.length} awaiting payment` : 'Nothing owing'}
+          subTone={overdueInvoices.length > 0 ? 'red' : sentInvoices.length > 0 ? 'amber' : 'green'}
           icon={<AlertCircle size={18} />}
-          iconBg={overdueInvoices.length > 0 ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}
+          accent="red"
           onClick={() => navigate('/invoices')}
         />
       </section>
@@ -196,7 +280,7 @@ export function DashboardPage() {
                   className="w-full flex items-start gap-3 px-4 sm:px-5 py-3.5 text-left hover:bg-surface-50 transition-colors"
                 >
                   <span
-                    className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${a.tone === 'red' ? 'bg-red-500' : a.tone === 'amber' ? 'bg-amber-500' : 'bg-brand-500'}`}
+                    className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${a.tone === 'red' ? 'bg-red-500' : a.tone === 'amber' ? 'bg-brass-500' : 'bg-blue-700'}`}
                     aria-hidden="true"
                   />
                   <span className="flex-1 min-w-0">
@@ -218,10 +302,10 @@ export function DashboardPage() {
         <h2 className="section-title mb-3">Quick actions</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 stagger">
           {[
-            { label: 'Add property',   icon: Building2,  path: '/properties?add=1', bg: 'bg-brand-50',  fg: 'text-brand-700' },
-            { label: 'Monthly invoices', icon: FileText, path: '/invoices?generate=1', bg: 'bg-brass-50', fg: 'text-brass-700' },
-            { label: 'Record payment', icon: CreditCard, path: '/payments',    bg: 'bg-brand-50',  fg: 'text-brand-700' },
-            { label: 'Log maintenance',icon: Wrench,     path: '/maintenance', bg: 'bg-amber-50',  fg: 'text-amber-700' },
+            { label: 'Add property',   icon: Building2,  path: '/properties?add=1', bg: 'bg-blue-50',  fg: 'text-blue-900' },
+            { label: 'Monthly invoices', icon: FileText, path: '/invoices?generate=1', bg: 'bg-brass-100', fg: 'text-brass-800' },
+            { label: 'Record payment', icon: CreditCard, path: '/invoices',    bg: 'bg-brand-50',  fg: 'text-brand-700' },
+            { label: 'Log maintenance',icon: Wrench,     path: '/maintenance', bg: 'bg-red-50',  fg: 'text-red-600' },
           ].map(({ label, icon: Icon, path, bg, fg }) => (
             <button
               key={label}
@@ -359,28 +443,35 @@ interface StatTileProps {
   sub: string;
   subTone?: 'green' | 'amber' | 'red';
   icon: React.ReactNode;
-  iconBg: string;
-  highlight?: boolean;
+  /** Which flag colour this tile carries. */
+  accent: 'green' | 'gold' | 'red' | 'blue';
   onClick?: () => void;
 }
 
-function StatTile({ label, value, sub, subTone, icon, iconBg, highlight, onClick }: StatTileProps) {
+const ACCENT: Record<StatTileProps['accent'], { tile: string; icon: string }> = {
+  green: { tile: 'stat-green', icon: 'bg-brand-50 text-brand-700' },
+  gold:  { tile: 'stat-gold',  icon: 'bg-brass-100 text-brass-800' },
+  red:   { tile: 'stat-red',   icon: 'bg-red-50 text-red-600' },
+  blue:  { tile: 'stat-blue',  icon: 'bg-blue-50 text-blue-900' },
+};
+
+function StatTile({ label, value, sub, subTone, icon, accent, onClick }: StatTileProps) {
   const subColor = subTone === 'red'   ? 'text-red-600' :
-                   subTone === 'amber' ? 'text-amber-700' :
+                   subTone === 'amber' ? 'text-brass-700' :
                    subTone === 'green' ? 'text-brand-700' : 'text-ink-400';
 
   return (
     <button
       onClick={onClick}
-      className={`stat-card card-lift text-left ${highlight ? 'ring-1 ring-brass-200' : ''}`}
+      className={`stat-card ${ACCENT[accent].tile} card-lift text-left`}
       aria-label={`${label}: ${value}, ${sub}`}
     >
-      <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center mb-3`}>
+      <div className={`w-10 h-10 rounded-xl ${ACCENT[accent].icon} flex items-center justify-center mb-3 mt-1`}>
         {icon}
       </div>
       <p className="text-2xs font-bold text-ink-500 uppercase tracking-widest mb-1">{label}</p>
-      <p className="text-xl sm:text-2xl font-bold text-ink-900 leading-none tabular truncate">{value}</p>
-      <p className={`text-xs font-medium mt-1.5 ${subColor}`}>{sub}</p>
+      <p className="font-display text-xl sm:text-[1.7rem] font-bold text-ink-900 leading-none tabular truncate">{value}</p>
+      <p className={`text-xs font-semibold mt-2 ${subColor}`}>{sub}</p>
     </button>
   );
 }

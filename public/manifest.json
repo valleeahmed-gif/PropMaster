@@ -6,8 +6,8 @@
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f1f3f9",
-  "theme_color": "#007749",
+  "background_color": "#f4f5f3",
+  "theme_color": "#0a0a0a",
   "icons": [
     {
       "src": "/propmaster-logo.png",

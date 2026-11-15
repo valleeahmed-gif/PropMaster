@@ -110,7 +110,7 @@ export function PageLoader({ label = 'Loading…' }: { label?: string }) {
           style={{
             borderWidth: 3,
             borderStyle: 'solid',
-            borderColor: '#c8ecda',
+            borderColor: '#e7e9e6',
             borderTopColor: '#007749',
           }}
           role="status"

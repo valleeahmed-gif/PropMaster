@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, CheckCircle, AlertCircle, Mail, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { LogoIcon } from '../components/Logo';
+import { FlagRibbon } from '../components/Brand';
 import { Field } from '../components/UI';
 
 type Step = 'loading' | 'set-password' | 'linking' | 'done' | 'error' | 'already-linked';
@@ -168,11 +169,12 @@ export function AcceptInvitePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-100">
+      <FlagRibbon />
       {/* Top brand */}
       <div className="px-4 sm:px-8 py-5">
         <div className="inline-flex items-center gap-2.5">
           <LogoIcon size={32} />
-          <span className="font-bold text-ink-900 tracking-tight">PropMaster</span>
+          <span className="font-display text-lg font-bold text-ink-900 tracking-tight">PropMaster</span>
         </div>
       </div>
 
@@ -185,7 +187,7 @@ export function AcceptInvitePage() {
               <p className="text-2xs font-bold text-brand-700 uppercase tracking-widest mb-2">
                 Welcome to PropMaster
               </p>
-              <h1 className="font-display text-3xl text-ink-900 tracking-tight">
+              <h1 className="font-display text-3xl font-bold text-ink-900 tracking-tight">
                 {tenantName ? `Hi, ${tenantName.split(' ')[0]}` : 'Welcome'}
               </h1>
               {propertyName && (
@@ -204,7 +206,7 @@ export function AcceptInvitePage() {
                   style={{
                     borderWidth: 3,
                     borderStyle: 'solid',
-                    borderColor: '#c8ecda',
+                    borderColor: '#e7e9e6',
                     borderTopColor: '#007749',
                   }}
                   role="status"
@@ -292,7 +294,7 @@ export function AcceptInvitePage() {
                   style={{
                     borderWidth: 3,
                     borderStyle: 'solid',
-                    borderColor: '#c8ecda',
+                    borderColor: '#e7e9e6',
                     borderTopColor: '#007749',
                   }}
                   role="status"
@@ -307,7 +309,7 @@ export function AcceptInvitePage() {
                   <CheckCircle size={32} className="text-brand-700" />
                 </div>
                 <div>
-                  <p className="font-display text-2xl text-ink-900 tracking-tight">You're all set!</p>
+                  <p className="font-display text-2xl font-bold text-ink-900 tracking-tight">You're all set!</p>
                   <p className="text-sm text-ink-500 mt-1.5">
                     Taking you to your tenant portal…
                   </p>
@@ -321,7 +323,7 @@ export function AcceptInvitePage() {
                   <Sparkles size={32} className="text-brand-700" />
                 </div>
                 <div>
-                  <p className="font-display text-2xl text-ink-900 tracking-tight">Welcome back</p>
+                  <p className="font-display text-2xl font-bold text-ink-900 tracking-tight">Welcome back</p>
                   <p className="text-sm text-ink-500 mt-1.5">
                     You're already set up — taking you home…
                   </p>
@@ -335,7 +337,7 @@ export function AcceptInvitePage() {
                   <AlertCircle size={32} className="text-red-500" />
                 </div>
                 <div>
-                  <p className="font-display text-2xl text-ink-900 tracking-tight">
+                  <p className="font-display text-2xl font-bold text-ink-900 tracking-tight">
                     Something went wrong
                   </p>
                   <p className="text-sm text-ink-500 mt-1.5 leading-relaxed max-w-sm">

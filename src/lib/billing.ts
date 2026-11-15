@@ -17,6 +17,15 @@ export function dueDateFor(month: number, year: number, dueDay?: number): string
   return `${year}-${pad(month)}-${pad(day)}`;
 }
 
+/**
+ * Due date for a lease's invoice in a billing month. Never earlier than the
+ * lease start — a lease that begins mid-month must not be born overdue.
+ */
+export function dueDateForLease(lease: Pick<Lease, 'dueDay' | 'startDate'>, month: number, year: number): string {
+  const due = dueDateFor(month, year, lease.dueDay);
+  return lease.startDate && lease.startDate > due && lease.startDate.slice(0, 7) === due.slice(0, 7) ? lease.startDate : due;
+}
+
 /** Whether the lease is running at any point in the given month. */
 export function leaseCoversMonth(lease: Lease, month: number, year: number): boolean {
   const first = `${year}-${pad(month)}-01`;

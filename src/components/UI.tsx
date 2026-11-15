@@ -26,12 +26,12 @@ export function Modal({ open, onClose, title, children, size = 'md' }: ModalProp
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 modal-backdrop"
-      style={{ background: 'rgba(15,18,35,0.55)' }}
+      style={{ background: 'rgba(10,10,10,0.6)' }}
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div role="dialog" aria-modal="true" aria-label={title} className={`bg-white w-full ${widths[size]} rounded-t-3xl sm:rounded-2xl shadow-2xl modal-content flex flex-col`} style={{ maxHeight: 'min(92dvh, 92vh)' }}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-surface-200 flex-shrink-0">
-          <h2 className="font-semibold text-gray-900 text-base">{title}</h2>
+          <h2 className="font-display font-bold text-gray-900 text-lg tracking-tight">{title}</h2>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-100 transition-colors" aria-label="Close">
             <X size={16} className="text-gray-500" />
           </button>
@@ -102,13 +102,13 @@ export function ToastContainer({ toasts: propToasts, dismissToast: propDismiss }
     success: <CheckCircle size={16} className="text-brand-700" />,
     error:   <AlertCircle size={16} className="text-red-600" />,
     warning: <AlertTriangle size={16} className="text-amber-600" />,
-    info:    <Info size={16} className="text-brand-700" />,
+    info:    <Info size={16} className="text-blue-800" />,
   };
   const bg: Record<Toast['type'], string> = {
     success: 'bg-brand-50 border-brand-200',
     error:   'bg-red-50 border-red-200',
     warning: 'bg-amber-50 border-amber-200',
-    info:    'bg-brand-50 border-brand-200',
+    info:    'bg-blue-50 border-blue-200',
   };
 
   return (
