@@ -220,3 +220,47 @@ Water consumption                                             412.80
 Reserve fund levy                                             240.00
 Total due                                                   2,252.80
 `;
+
+// WeconnectU-style body corporate statement (layout copied from a real one;
+// every personal detail replaced). The charge row is only the invoice total —
+// the levy / water / reserve split is on the invoice itself.
+const col = (...parts: [string, number, ('l' | 'r')?][]) => {
+  let s = '';
+  for (const [t, at, align] of parts) s = s.padEnd(align === 'r' ? at - t.length : at) + t;
+  return s;
+};
+export const WECONNECTU_STATEMENT = [
+  col(['Example Body Corporate', 50], ['ADDRESS', 80]),
+  col(['Reg No: SS000/1999', 50], ['1 Sample Street', 80]),
+  col(['Email.: agent@example.test', 50], ['Parkhurst', 80]),
+  col(['Contact No.: 011 000 0000', 50], ['Johannesburg', 80]),
+  col(['2193', 80]),
+  col(['Sample Owner', 0], ['Unit No 7', 50]),
+  col(['Unit 7 Example,', 0], ['Reference: SAM001-U07', 50]),
+  col(['1 Test Street,', 0], ['Tel: 0800000000', 50]),
+  col(['Johannesburg,', 0], ['Email: owner@example.test', 50]),
+  col(['DATE', 88]),
+  col(['STATEMENT', 4], ['2026-12-31', 90, 'r']),
+  col(['Date', 0], ['Source', 12], ['Description', 26], ['Debit', 60, 'r'], ['Credit', 72, 'r'], ['Cumulative', 88, 'r']),
+  col(['2026-11-01', 0], ['Balance b/f', 26], ['0', 60, 'r'], ['3144.86', 72, 'r'], ['-3 144.86', 88, 'r']),
+  col(['2026-11-01', 0], ['Invoice', 12], ['INV04390', 26], ['3144.86', 60, 'r'], ['0', 72, 'r'], ['0.00', 88, 'r']),
+  col(['120+ days', 0], ['90+ days', 18], ['60+ days', 36], ['30+ days', 54], ['Current', 72]),
+  col(['0.00', 14, 'r'], ['0.00', 32, 'r'], ['0.00', 50, 'r'], ['0.00', 68, 'r'], ['0.00', 90, 'r']),
+  col(['BANKING DETAILS', 0], ['Total Due', 90, 'r']),
+  col(['Bank Name: FIRST NATIONAL BANK', 0], ['Reference: SAM001-U07', 40]),
+  col(['Account Number: 62000000000', 0], ['Account Holder: EXAMPLE', 40]),
+  col(['R 0.00', 90, 'r']),
+  col(['Branch Code: 250655', 0], ['Account Type: CURRENT', 40]),
+  col(['Powered by WeconnectU', 30]),
+].join('\n');
+
+// The same agent's statement when the month's levy items are listed directly.
+export const WECONNECTU_ITEMISED = WECONNECTU_STATEMENT.replace(
+  col(['2026-11-01', 0], ['Invoice', 12], ['INV04390', 26], ['3144.86', 60, 'r'], ['0', 72, 'r'], ['0.00', 88, 'r']),
+  [
+    col(['2026-11-01', 0], ['Invoice', 12], ['Admin levy', 26], ['2400.00', 60, 'r'], ['0', 72, 'r'], ['-744.86', 88, 'r']),
+    col(['2026-11-01', 0], ['Invoice', 12], ['Reserve fund', 26], ['240.00', 60, 'r'], ['0', 72, 'r'], ['-504.86', 88, 'r']),
+    col(['2026-11-01', 0], ['Invoice', 12], ['Water', 26], ['477.86', 60, 'r'], ['0', 72, 'r'], ['-27.00', 88, 'r']),
+    col(['2026-11-01', 0], ['Invoice', 12], ['CSOS levy', 26], ['27.00', 60, 'r'], ['0', 72, 'r'], ['0.00', 88, 'r']),
+  ].join('\n'),
+);

@@ -221,3 +221,26 @@ Date          Description                 Debit        Balance
     expect(r.items.map(i => [i.label, i.amount])).toEqual([['Garden service', 350], ['Pool maintenance', 420]]);
   });
 });
+
+describe('real layout: WeconnectU body corporate statement', () => {
+  const r = read(fx.WECONNECTU_STATEMENT);
+  it('reads the invoice total as a levy line, labelled with the invoice number', () => {
+    expect(r.kind).toBe('levy');
+    expect(r.items.map(i => [i.label, i.amount])).toEqual([['Levy invoice INV04390', 3144.86]]);
+  });
+  it('explains that the split is on the invoice itself', () => {
+    expect(r.warnings.join(' ')).toMatch(/INV04390.*one total.*upload the invoice/i);
+  });
+  it('uses the unit reference, not the bank account number', () => {
+    expect(r.accountNumber).toBe('SAM001-U07');
+  });
+  it('uses the month the charge is dated, not the statement date', () => {
+    expect(r.statementDate).toBe('2026-12-31');
+    expect(r.period).toEqual({ month: 11, year: 2026 });
+  });
+  it('splits the items when the statement lists them', () => {
+    const it2 = read(fx.WECONNECTU_ITEMISED);
+    expect(amounts(it2)).toEqual({ 'Water': 477.86, 'Levy': 2400, 'Reserve Fund Levy': 240, 'CSOS Levy': 27 });
+    expect(it2.items.find(i => i.category === 'water')!.isRecoverable).toBe(true);
+  });
+});

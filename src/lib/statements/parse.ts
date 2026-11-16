@@ -196,6 +196,8 @@ interface Candidate {
   confirmed: boolean;
   /** The utility charges already include VAT (VAT lines or a VAT column were printed per service). */
   vatInItems: boolean;
+  /** "YYYY-MM" the kept charge rows are dated (line items only). */
+  chargeMonth?: string;
   notes: string[];
 }
 
@@ -330,7 +332,7 @@ interface Column { role: ColumnRole; x: number; x2: number }
 function columnRole(cell: string): ColumnRole | null {
   const c = cell.toLowerCase().replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!c || c.length > 26) return null;
-  if (/^(balance|running balance|saldo|balans)$/.test(c)) return 'balance';
+  if (/^(balance|running balance|cumulative|cumulative balance|saldo|balans)$/.test(c)) return 'balance';
   if (/^(credits?|payments?|receipts?|krediet|betalings?)$/.test(c)) return 'credit';
   if (/^(vat|btw)( amount)?$/.test(c)) return 'vat';
   if (/excl/.test(c)) return 'excl';
@@ -406,6 +408,7 @@ function parseLineItems(lines: Line[], kind: StatementKind, period: { month: num
   let vatColumn = false;
   const raw: RawLineItem[] = [];
   const isHeader = (l: Line) => !!detectColumns(l) && findAmounts(l.text).length === 0;
+  const invoiceTotals: { ref: string; amount: number; month: string | null }[] = [];
   const borrowed = pairDescriptions(lines, isHeader);
 
   lines.forEach((line, idx) => {
@@ -416,7 +419,9 @@ function parseLineItems(lines: Line[], kind: StatementKind, period: { month: num
       if (header.some(c => c.role === 'vat' || c.role === 'excl')) vatColumn = true;
       return;
     }
-    const text = borrowed.has(idx) ? `${borrowed.get(idx)}  ${line.text}` : line.text;
+    // Bare numbers without cents (e.g. "0" in an empty credit column) are not part of the description.
+    const ownText = line.cells.filter(c => !/^[-(]?\s*R?\s?\d[\d ,]*\)?-?$/.test(c.str.trim())).map(c => c.str).join('  ');
+    const text = borrowed.has(idx) ? `${borrowed.get(idx)}  ${ownText}` : ownText;
 
     if (isSummaryLine(text)) return;
     const desc = describe(text);
@@ -468,6 +473,17 @@ function parseLineItems(lines: Line[], kind: StatementKind, period: { month: num
       raw.push({ item: makeItem('sundry', value, 'VAT'), month });
       return;
     }
+    // A row that is just an invoice reference ("Invoice INV04390") is the total
+    // of a separate invoice document — common on managing agents' statements.
+    const invoiceRef = !category && kind !== 'municipal'
+      ? /\b(INV[-\s]?\d{3,}[A-Z0-9-]*)\b/i.exec(text)?.[1] ?? (/^\W*(tax\s+)?invoice\b/i.test(desc) ? /\b([A-Z]{0,5}\d{4,}[A-Z0-9-]*)\b/.exec(text)?.[1] : undefined)
+      : undefined;
+    if (invoiceRef && meaningfulLetters(text.replace(/\binvoice\b/gi, '')) < 3) {
+      const item = makeItem('levy', value, `Levy invoice ${invoiceRef.toUpperCase().replace(/\s+/g, '')}`);
+      raw.push({ item, month });
+      invoiceTotals.push({ ref: item.label.replace('Levy invoice ', ''), amount: value, month });
+      return;
+    }
     if (!category) {
       // Unknown description: only keep it when it is clearly a table row.
       if (!(inTable || month) || kind === 'municipal') return;
@@ -494,7 +510,15 @@ function parseLineItems(lines: Line[], kind: StatementKind, period: { month: num
       notes.push(`This statement lists several months. Only charges dated ${m}/${y} were read; ${skipped} older line${skipped === 1 ? ' was' : 's were'} left out.`);
     }
   }
-  return { strategy: 'lineItems', items: kept.map(r => r.item), confirmed: false, vatInItems: vatColumn, notes };
+  const keptRefs = invoiceTotals.filter(t => kept.some(k => k.item.label === `Levy invoice ${t.ref}`));
+  for (const t of keptRefs) {
+    notes.push(`This statement shows invoice ${t.ref} as one total (${formatCurrency(t.amount)}). The split into levy, water, reserve fund and other charges is on the invoice itself — upload the invoice from your managing agent's portal to capture each line, and to recover water from your tenant.`);
+  }
+  const chargeMonths = Array.from(new Set(kept.map(k => k.month).filter((m): m is string => !!m))).sort();
+  return {
+    strategy: 'lineItems', items: kept.map(r => r.item), confirmed: false, vatInItems: vatColumn,
+    chargeMonth: chargeMonths[chargeMonths.length - 1], notes,
+  };
 }
 
 // ── Statement-level facts ───────────────────────────────────
@@ -565,6 +589,8 @@ interface Facts {
   statementDate?: string;
   dueDate?: string;
   period?: { month: number; year: number };
+  /** The statement says which month it is for (not just its date). */
+  periodStated?: boolean;
   currentExcl?: number;
   currentIncl?: number;
   vat?: number;
@@ -591,6 +617,7 @@ function readFacts(lines: Line[]): Facts {
 
   let exclIndex = -10;
   const vatCandidates: { idx: number; amount: number }[] = [];
+  let customerRef: string | undefined;
   lines.forEach((line, idx) => {
     const t = line.text;
     const low = t.toLowerCase();
@@ -610,9 +637,16 @@ function readFacts(lines: Line[]): Facts {
       }
     }
 
-    if (!facts.accountNumber) {
+    // The bank's account number (in the "banking details" box) is not the customer's.
+    const bankContext = /bank|branch|account holder|account type|swift/i.test(
+      [lines[idx - 3]?.text, lines[idx - 2]?.text, lines[idx - 1]?.text, t].join(' '));
+    if (!facts.accountNumber && !bankContext) {
       const m = /acc(?:ount|t)?\.?\s*(?:number|no|nr|num|#)\.?\s*[:#]?\s*([A-Z]{0,3}\d[\dA-Z/-]{4,18})/i.exec(t);
       if (m) facts.accountNumber = m[1];
+    }
+    if (!customerRef) {
+      const m = /\b(?:your\s+)?(?:reference|ref(?:erence)?\s*no\.?|customer\s+(?:code|ref(?:erence)?))\s*[:#]\s*([A-Z0-9][A-Z0-9/-]{3,20})/i.exec(t);
+      if (m && /\d/.test(m[1])) customerRef = m[1];
     }
     const dates = findDates(t);
     if (dates.length) {
@@ -624,9 +658,11 @@ function readFacts(lines: Line[]): Facts {
     }
     if (!facts.period && /statement (for|month|period)|for the month|billing (month|period)|account (for|month)|levy (for|month)|period\s*[:=]|maand/.test(low)) {
       const my = findMonthYear(t.replace(/.*?(statement (for|month|period)|for the month|billing (month|period)|account (for|month)|levy (for|month)|period\s*[:=]|maand)/i, ''));
-      if (my) facts.period = my;
+      if (my) { facts.period = my; facts.periodStated = true; }
     }
   });
+
+  facts.accountNumber ??= customerRef;
 
   // VAT printed in the summary, next to the excl-VAT figure (not a per-service VAT line).
   const nearVat = vatCandidates.find(v => Math.abs(v.idx - exclIndex) <= 4);
@@ -759,6 +795,12 @@ export function parseStatement(lines: Line[], method: 'text' | 'ocr' = 'text'): 
 
   let items = best ? best.items : [];
   if (best) warnings.push(...best.notes);
+  // No "statement for <month>": the charges' own date is a better guide than
+  // the date the statement was printed.
+  let period = facts.period;
+  if (!facts.periodStated && best?.chargeMonth) {
+    period = { year: +best.chargeMonth.slice(0, 4), month: +best.chargeMonth.slice(5, 7) };
+  }
 
   const vatRatio = round2(vatRatioFor(items) * 10000) / 10000;
   let vatAdded = false;
@@ -821,7 +863,7 @@ export function parseStatement(lines: Line[], method: 'text' | 'ocr' = 'text'): 
     accountNumber: facts.accountNumber,
     statementDate: facts.statementDate,
     dueDate: facts.dueDate,
-    period: facts.period,
+    period,
     items,
     totals: {
       currentCharges: targetIncl,
