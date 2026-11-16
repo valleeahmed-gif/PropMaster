@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, CheckCircle, AlertCircle, Mail, Sparkles } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { LogoIcon } from '../components/Logo';
-import { FlagRibbon } from '../components/Brand';
+import { ColourBar } from '../components/Brand';
 import { Field } from '../components/UI';
 
 type Step = 'loading' | 'set-password' | 'linking' | 'done' | 'error' | 'already-linked';
@@ -169,7 +169,7 @@ export function AcceptInvitePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-surface-100">
-      <FlagRibbon />
+      <ColourBar />
       {/* Top brand */}
       <div className="px-4 sm:px-8 py-5">
         <div className="inline-flex items-center gap-2.5">

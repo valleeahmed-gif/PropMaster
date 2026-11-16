@@ -50,12 +50,11 @@
     .wrap { max-width: 1140px; margin: 0 auto; padding: 0 20px; }
     .tabular { font-variant-numeric: tabular-nums; }
 
-    /* ── Flag ribbon ── */
+    /* ── Colour bar: four palette colours in equal parts ── */
     .ribbon {
       height: 5px;
       background: linear-gradient(90deg,
-        var(--black) 0 12%, var(--gold) 12% 21%, var(--green) 21% 53%,
-        var(--white) 53% 58%, var(--red) 58% 79%, var(--blue) 79% 100%);
+        var(--green) 0 25%, var(--gold) 25% 50%, var(--red) 50% 75%, var(--blue) 75% 100%);
     }
 
     /* ── Buttons ── */
@@ -94,7 +93,7 @@
 
     /* ── Hero ── */
     .hero { position: relative; background: var(--black); color: #fff; overflow: hidden; }
-    .hero-art { position: absolute; top: 0; bottom: 0; right: 0; width: 46%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 38%); mask-image: linear-gradient(90deg, transparent, #000 38%); }
+    .hero-art { position: absolute; top: 48px; bottom: 140px; right: -40px; width: 40%; }
     .hero-art svg { width: 100%; height: 100%; display: block; }
     .hero-inner { position: relative; padding: 84px 0 150px; max-width: 640px; }
     .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
@@ -106,8 +105,8 @@
     .hero-trust span { display: inline-flex; align-items: center; gap: 8px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     @media (max-width: 860px) {
-      .hero-art { width: 100%; height: 230px; top: auto; -webkit-mask-image: linear-gradient(180deg, transparent, #000 40%); mask-image: linear-gradient(180deg, transparent, #000 40%); }
-      .hero-inner { padding: 52px 0 310px; }
+      .hero-art { width: auto; left: 20px; right: -60px; height: 150px; top: auto; bottom: 110px; }
+      .hero-inner { padding: 52px 0 300px; }
     }
 
     /* ── Product preview (overlaps the hero) ── */
@@ -198,12 +197,12 @@
 
     /* ── Final call to action ── */
     .cta { position: relative; background: var(--black); color: #fff; border-radius: 28px; overflow: hidden; padding: 64px 48px; }
-    .cta-art { position: absolute; top: 0; bottom: 0; right: 0; width: 42%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%); mask-image: linear-gradient(90deg, transparent, #000 45%); }
+    .cta-art { position: absolute; top: -20px; bottom: -20px; right: -30px; width: 34%; }
     .cta-art svg { width: 100%; height: 100%; display: block; }
     .cta-inner { position: relative; max-width: 560px; }
     .cta h2 { color: #fff; }
     .cta p { color: rgba(255,255,255,.74); font-size: 17px; }
-    @media (max-width: 760px) { .cta { padding: 44px 24px 150px; } .cta-art { width: 100%; height: 120px; top: auto; -webkit-mask-image: linear-gradient(180deg, transparent, #000 50%); mask-image: linear-gradient(180deg, transparent, #000 50%); } }
+    @media (max-width: 760px) { .cta { padding: 44px 24px 160px; } .cta-art { width: auto; left: 24px; right: -40px; height: 110px; top: auto; bottom: 24px; } }
 
     /* ── Footer ── */
     footer { padding: 40px 0 48px; }
@@ -222,16 +221,41 @@
 </head>
 <body>
 
-<!-- The flag motif, defined once and reused -->
+<!-- Colour tiles, defined once and reused -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="flag-art" viewBox="0 0 420 400" preserveAspectRatio="xMinYMid slice">
-    <g fill="none" stroke-linejoin="miter" stroke-miterlimit="8">
-      <path d="M-42.9 .9 138.1 200-42.9 399.1" stroke="#FFB81C" stroke-width="22"/>
-      <path d="M-20-20 180 200-20 420M180 200H2400" stroke="#007749" stroke-width="40"/>
-      <path d="M-.8-37.5 191.5 174H2400M-.8 437.5 191.5 226H2400" stroke="#FFFFFF" stroke-width="12"/>
-      <path d="M18.5-55 203 148H2400" stroke="#E03C31" stroke-width="40"/>
-      <path d="M18.5 455 203 252H2400" stroke="#001489" stroke-width="40"/>
-    </g>
+  <symbol id="tiles" viewBox="0 0 430 430" preserveAspectRatio="xMinYMid slice">
+    <path d="M100 100L0 100A100 100 0 0 1 100 0Z" fill="#FFB81C">
+    </path>
+    <rect x="110" y="0" width="100" height="100" rx="14" fill="#007749">
+    </rect>
+    <circle cx="270" cy="50" r="50" fill="#E03C31">
+    </circle>
+    <path d="M330 100L430 100A100 100 0 0 0 330 0Z" fill="#001489">
+    </path>
+    <rect x="0" y="110" width="100" height="100" rx="14" fill="#001489">
+    </rect>
+    <path d="M110 210A50 50 0 0 1 210 210Z" fill="#FFB81C">
+    </path>
+    <rect x="220" y="110" width="100" height="100" rx="14" fill="#007749">
+    </rect>
+    <circle cx="380" cy="160" r="41" fill="none" stroke="#FFFFFF" stroke-width="18">
+    </circle>
+    <circle cx="50" cy="270" r="50" fill="#007749">
+    </circle>
+    <path d="M210 220L110 220A100 100 0 0 0 210 320Z" fill="#E03C31">
+    </path>
+    <path d="M220 220A50 50 0 0 1 220 320Z" fill="#001489">
+    </path>
+    <rect x="330" y="220" width="100" height="100" rx="14" fill="#FFB81C">
+    </rect>
+    <path d="M0 330A50 50 0 0 0 100 330Z" fill="#E03C31">
+    </path>
+    <rect x="110" y="330" width="100" height="100" rx="14" fill="#FFB81C">
+    </rect>
+    <path d="M220 330L320 330A100 100 0 0 1 220 430Z" fill="#007749">
+    </path>
+    <rect x="330" y="330" width="100" height="100" rx="14" fill="#E03C31">
+    </rect>
   </symbol>
 </svg>
 
@@ -256,7 +280,7 @@
 <main>
 <!-- ── Hero ── -->
 <div class="hero">
-  <div class="hero-art" aria-hidden="true"><svg><use href="#flag-art"/></svg></div>
+  <div class="hero-art" aria-hidden="true"><svg><use href="#tiles"/></svg></div>
   <div class="wrap">
     <div class="hero-inner">
       <span class="eyebrow">Built for South African landlords</span>
@@ -441,7 +465,7 @@
 <section>
   <div class="wrap">
     <div class="cta fade-up">
-      <div class="cta-art" aria-hidden="true"><svg><use href="#flag-art"/></svg></div>
+      <div class="cta-art" aria-hidden="true"><svg><use href="#tiles"/></svg></div>
       <div class="cta-inner">
         <span class="eyebrow">Get started today</span>
         <h2>Ready to take control of your portfolio?</h2>

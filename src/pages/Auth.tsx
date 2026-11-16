@@ -4,11 +4,11 @@ import { Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Field } from '../components/UI';
 import { LogoIcon } from '../components/Logo';
-import { FlagArt, FlagRibbon } from '../components/Brand';
+import { ColourBar, ColourTiles } from '../components/Brand';
 
 // ── Shared auth shell ──────────────────────────────────────
-// Desktop: black brand panel with the flag motif beside the form.
-// Phone: the motif becomes a banner above the form.
+// Desktop: black brand panel with the colour tiles beside the form.
+// Phone: the tiles become a banner above the form.
 function AuthShell({ title, subtitle, children, footer }: {
   title: string;
   subtitle: string;
@@ -17,7 +17,7 @@ function AuthShell({ title, subtitle, children, footer }: {
 }) {
   return (
     <div className="min-h-screen flex flex-col bg-white">
-      <FlagRibbon />
+      <ColourBar />
       <div className="flex-1 grid lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
         {/* Brand panel */}
         <aside className="hidden lg:flex flex-col bg-flag-black text-white p-10 xl:p-14" aria-hidden="true">
@@ -25,8 +25,8 @@ function AuthShell({ title, subtitle, children, footer }: {
             <LogoIcon size={40} />
             <span className="font-display font-bold text-xl tracking-tight">PropMaster</span>
           </div>
-          <div className="relative flex-1 my-10 min-h-[220px] -mr-10 xl:-mr-14 overflow-hidden">
-            <FlagArt className="absolute inset-0 w-full h-full" preserveAspectRatio="xMinYMid meet" />
+          <div className="relative flex-1 my-10 min-h-[220px] max-w-[440px]">
+            <ColourTiles className="absolute inset-0 w-full h-full" preserveAspectRatio="xMinYMid meet" />
           </div>
           <div>
             <p className="font-display text-4xl xl:text-5xl font-bold leading-[1.05] tracking-tight">
@@ -54,7 +54,9 @@ function AuthShell({ title, subtitle, children, footer }: {
           {/* Phone banner */}
           <div className="lg:hidden bg-flag-black text-white">
             <div className="relative h-28 overflow-hidden">
-              <FlagArt className="absolute inset-0 w-full h-full" preserveAspectRatio="xMaxYMid slice" />
+              <div className="absolute -inset-y-3 -right-3 w-[62%]">
+                <ColourTiles className="w-full h-full" preserveAspectRatio="xMinYMid slice" />
+              </div>
               <Link to="/login" className="absolute left-4 top-1/2 -translate-y-1/2 inline-flex items-center gap-2.5 bg-flag-black/85 rounded-xl pl-1.5 pr-3.5 py-1.5">
                 <LogoIcon size={32} />
                 <span className="font-display font-bold tracking-tight">PropMaster</span>

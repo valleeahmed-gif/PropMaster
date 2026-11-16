@@ -7,7 +7,7 @@ import {
 import { useTenant } from './TenantContext';
 import { Modal, Field, Select, EmptyState } from '../components/UI';
 import { Skeleton } from '../components/Skeleton';
-import { FlagArt } from '../components/Brand';
+import { ColourTiles } from '../components/Brand';
 import { formatCurrency, formatDate, formatMonthYear, daysUntil } from '../utils';
 import { Invoice } from '../types';
 
@@ -208,11 +208,8 @@ function WelcomeCard({ name, property }: { name: string; property: any }) {
 
   return (
     <div className="hero-panel shadow-md">
-      <div
-        className="absolute inset-y-0 right-0 w-[38%] pointer-events-none"
-        style={{ WebkitMaskImage: 'linear-gradient(90deg, transparent, #000 55%)', maskImage: 'linear-gradient(90deg, transparent, #000 55%)' }}
-      >
-        <FlagArt className="w-full h-full" />
+      <div className="absolute -inset-y-4 -right-4 w-[30%] pointer-events-none">
+        <ColourTiles className="w-full h-full" preserveAspectRatio="xMinYMid slice" />
       </div>
       <div className="relative p-6 max-w-[78%]">
         <p className="text-2xs font-bold text-brass-500 uppercase tracking-widest mb-2">

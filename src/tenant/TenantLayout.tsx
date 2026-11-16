@@ -4,7 +4,7 @@ import { Home, FileText, CreditCard, Wrench, LogOut, WifiOff } from 'lucide-reac
 import { useTenant } from './TenantContext';
 import { LogoIcon } from '../components/Logo';
 import { ToastContainer } from '../components/UI';
-import { FlagRibbon } from '../components/Brand';
+import { ColourBar } from '../components/Brand';
 
 const TENANT_NAV = [
   { path: '/tenant/home',        label: 'Home',        icon: Home },
@@ -97,7 +97,7 @@ export function TenantLayout({ children }: TenantLayoutProps) {
     <div className="min-h-screen bg-surface-100">
       {/* Skip link */}
       <a href="#tenant-content" className="skip-link">Skip to content</a>
-      <FlagRibbon />
+      <ColourBar />
 
       {/* Header */}
       <header

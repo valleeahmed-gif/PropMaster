@@ -5,7 +5,7 @@ import { Sidebar, MobileSidebarOverlay } from './Sidebar';
 import { LogoIcon } from './Logo';
 import { ToastContainer } from './UI';
 import { BottomNav } from './BottomNav';
-import { FlagRibbon } from './Brand';
+import { ColourBar } from './Brand';
 import { useApp } from '../context/AppContext';
 
 interface LayoutProps { children: ReactNode; }
@@ -36,7 +36,7 @@ export function Layout({ children }: LayoutProps) {
     <div className="flex flex-col h-screen overflow-hidden bg-surface-100">
       {/* Skip link for keyboard users */}
       <a href="#main-content" className="skip-link">Skip to main content</a>
-      <FlagRibbon />
+      <ColourBar />
 
       <div className="flex flex-1 min-h-0">
       {/* Desktop sidebar */}

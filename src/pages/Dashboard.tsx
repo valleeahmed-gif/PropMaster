@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { StatusBadge, PriorityBadge } from '../components/UI';
-import { FlagArt } from '../components/Brand';
+import { ColourTiles } from '../components/Brand';
 import { formatCurrency, formatDate, formatMonthYear, monthKey, daysUntil } from '../utils';
 import { invoiceForMonth, isRentDue } from '../lib/billing';
 
@@ -146,15 +146,12 @@ export function DashboardPage() {
 
   return (
     <div>
-      {/* Hero — black field with the converging flag bands */}
+      {/* Hero — black field with the colour tiles */}
       <section className="hero-panel mb-5 sm:mb-6">
-        <div
-          className="absolute inset-y-0 right-0 w-[44%] hidden md:block"
-          style={{ WebkitMaskImage: 'linear-gradient(90deg, transparent, #000 42%)', maskImage: 'linear-gradient(90deg, transparent, #000 42%)' }}
-        >
-          <FlagArt className="w-full h-full" />
+        <div className="absolute -inset-y-6 -right-6 w-[34%] hidden md:block">
+          <ColourTiles className="w-full h-full" preserveAspectRatio="xMinYMid slice" />
         </div>
-        <div className="relative p-6 sm:p-8 md:max-w-[62%]">
+        <div className="relative p-6 sm:p-8 md:max-w-[64%]">
           <p className="text-xs font-bold text-brass-500 uppercase tracking-widest mb-2">
             {now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
@@ -184,7 +181,7 @@ export function DashboardPage() {
             </button>
           </div>
         </div>
-        <div className="flag-ribbon md:hidden" />
+        <div className="colour-bar md:hidden" />
       </section>
 
       {/* Getting started — until the first rent has been collected */}

@@ -82,28 +82,16 @@
 }
 
 @layer components {
-  /* ── Flag ribbon ─────────────────────────────────────────
-     The six colours as one thin band: the signature of every screen. */
-  .flag-ribbon {
+  /* ── Colour bar ──────────────────────────────────────────
+     Four palette colours in equal parts: the accent on every screen. */
+  .colour-bar {
     height: 4px;
     flex-shrink: 0;
     background: linear-gradient(90deg,
-      var(--flag-black) 0 12%,
-      var(--flag-gold)  12% 21%,
-      var(--flag-green) 21% 53%,
-      var(--flag-white) 53% 58%,
-      var(--flag-red)   58% 79%,
-      var(--flag-blue)  79% 100%);
-  }
-  .flag-ribbon-v {
-    width: 4px;
-    flex-shrink: 0;
-    background: linear-gradient(180deg,
-      var(--flag-red)   0 24%,
-      var(--flag-white) 24% 29%,
-      var(--flag-green) 29% 71%,
-      var(--flag-white) 71% 76%,
-      var(--flag-blue)  76% 100%);
+      var(--flag-green) 0 25%,
+      var(--flag-gold)  25% 50%,
+      var(--flag-red)   50% 75%,
+      var(--flag-blue)  75% 100%);
   }
 
   /* ── Buttons ─────────────────────────────────────────── */
@@ -235,7 +223,7 @@
   .stat-red   { --accent: var(--flag-red); }
   .stat-blue  { --accent: var(--flag-blue); }
 
-  /* ── Hero panel (black field with the converging bands) ── */
+  /* ── Hero panel (black field with the colour tiles) ─────── */
   .hero-panel {
     @apply relative overflow-hidden rounded-3xl text-white;
     background: var(--flag-black);
