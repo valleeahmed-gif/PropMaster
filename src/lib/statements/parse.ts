@@ -12,7 +12,7 @@
 //                municipalities and by managing agents' levy statements.
 
 import { ChargeCategory, Confidence, Line, ParsedItem, ParsedStatement, StatementKind } from './types';
-import { CATEGORY_ORDER, classify, isRecoverable, labelFor } from './classify';
+import { CATEGORY_ORDER, classify, classifyReference, isRecoverable, isVatable, labelFor } from './classify';
 import { findAmounts, findDates, findMonthYear, near, round2, stripAmounts } from './money';
 import { formatCurrency } from '../../utils';
 
@@ -101,6 +101,8 @@ interface SectionResult {
   confirmed: boolean;
   /** Other plausible totals (printed subtotal vs sum of detail lines) when they disagree. */
   alternatives: number[];
+  /** The section printed its own VAT line, so its total already includes VAT. */
+  hasVat: boolean;
 }
 
 /** Work out a section's total from its detail lines, VAT lines and printed subtotals. */
@@ -129,6 +131,7 @@ function sectionTotal(sec: Section): SectionResult {
       };
     })
     .filter(e => e.value !== null);
+  const hasVat = entries.some(e => e.vat);
 
   entries.forEach((e, i) => {
     const value = e.value as number;
@@ -162,12 +165,12 @@ function sectionTotal(sec: Section): SectionResult {
       .filter((v, i, arr) => arr.findIndex(o => near(o, v, 0.011)) === i);
 
   if (sec.headerAmount !== null) {
-    if (entries.length === 0) return { total: sec.headerAmount, confirmed: true, alternatives: [] };
-    if (near(sec.headerAmount, total, 0.11)) return { total: sec.headerAmount, confirmed: true, alternatives: [] };
+    if (entries.length === 0) return { total: sec.headerAmount, confirmed: true, alternatives: [], hasVat };
+    if (near(sec.headerAmount, total, 0.11)) return { total: sec.headerAmount, confirmed: true, alternatives: [], hasVat };
     // Heading carried the total and the details did not add up: trust the heading.
-    if (!sawTotalLine) return { total: sec.headerAmount, confirmed: false, alternatives: alternativesFor(sec.headerAmount) };
+    if (!sawTotalLine) return { total: sec.headerAmount, confirmed: false, alternatives: alternativesFor(sec.headerAmount), hasVat };
   }
-  return { total, confirmed, alternatives: confirmed ? [] : alternativesFor(total) };
+  return { total, confirmed, alternatives: confirmed ? [] : alternativesFor(total), hasVat };
 }
 
 function readMeter(lines: string[]): Pick<ParsedItem, 'consumption' | 'readingType'> {
@@ -191,11 +194,34 @@ interface Candidate {
   items: ParsedItem[];
   /** All section subtotals checked out (sections strategy only). */
   confirmed: boolean;
+  /** The utility charges already include VAT (VAT lines or a VAT column were printed per service). */
+  vatInItems: boolean;
   notes: string[];
 }
 
 function makeItem(category: ChargeCategory, amount: number, label?: string): ParsedItem {
-  return { label: label || labelFor(category), amount: round2(amount), isRecoverable: isRecoverable(category), category };
+  return {
+    label: label || labelFor(category), amount: round2(amount),
+    isRecoverable: isRecoverable(category), vatable: isVatable(category), category,
+  };
+}
+
+/** One item per charge line — used for "Sundry" blocks that list unrelated charges. */
+function itemsPerLine(lines: string[]): ParsedItem[] {
+  const out: ParsedItem[] = [];
+  for (const t of lines) {
+    if (READING_RE.test(t)) continue;
+    const amounts = chargeAmounts(t);
+    if (!amounts.length) continue;
+    const desc = describe(t);
+    if (desc.replace(/[^a-z]/gi, '').length < 3) continue;                 // a bare subtotal
+    if (/^\W*((sub\s?-?)?total|totaal)|\b(vat|btw)\b/i.test(desc)) continue;
+    const value = amounts[amounts.length - 1];
+    if (value <= 0.005) continue;
+    const category = classify(desc) ?? classifyReference(t) ?? 'sundry';
+    out.push(makeItem(category, value, category === 'sundry' ? cleanLabel(desc) : undefined));
+  }
+  return out;
 }
 
 function parseSections(lines: Line[], targets: number[]): Candidate {
@@ -266,6 +292,14 @@ function parseSections(lines: Line[], targets: number[]): Candidate {
   sections.forEach((sec, i) => {
     const res = results[i];
     if (res.total <= 0.005) return;
+    // A "Sundry" / "Other charges" block lists unrelated charges: keep them apart.
+    if (sec.category === 'sundry') {
+      const split = itemsPerLine(sec.lines);
+      if (split.length) {
+        split.forEach(item => raw.push({ item }));
+        return;
+      }
+    }
     const item = makeItem(sec.category, res.total);
     Object.assign(item, readMeter([sec.headerText, ...sec.lines]));
     raw.push({ item });
@@ -283,7 +317,9 @@ function parseSections(lines: Line[], targets: number[]): Candidate {
     }
     items.push(item);
   }
-  return { strategy: 'sections', items, confirmed, notes };
+  // Utilities already include VAT only if their sections printed VAT lines.
+  const vatInItems = sections.some((sec, i) => isVatable(sec.category) && results[i].hasVat);
+  return { strategy: 'sections', items, confirmed, vatInItems, notes };
 }
 
 // ── Line items (tables, transaction lists) ──────────────────
@@ -320,9 +356,45 @@ function cleanLabel(desc: string): string {
        .replace(/^[\W_]+|[\W_]+$/g, '')
        .replace(/\s+/g, ' ')
        .trim();
-  if (!d) return 'Sundry';
+  if (!d || d.replace(/[^a-z]/gi, '').length < 3) return 'Other charge';
   d = d.length > 40 ? d.slice(0, 40).trim() : d;
   return d.charAt(0).toUpperCase() + d.slice(1);
+}
+
+/** Letters left in a description once dates and reference codes are removed. */
+function meaningfulLetters(text: string): number {
+  let d = describe(text);
+  for (const f of findDates(d).reverse()) d = d.slice(0, f.start) + ' ' + d.slice(f.end);
+  d = d.replace(/\b[A-Z]{0,5}\d{3,}[A-Z0-9/-]*\b/gi, ' ');
+  return d.replace(/[^a-z]/gi, '').length;
+}
+
+/**
+ * Some PDFs put a row's description on its own line above or below the
+ * date / reference / amounts (wrapped table cells). Pair each such amount
+ * row with the description line next to it.
+ */
+function pairDescriptions(lines: Line[], isHeader: (l: Line) => boolean): Map<number, string> {
+  const amountRow = (l: Line) => findAmounts(l.text).length > 0 && meaningfulLetters(l.text) < 3 && !isSummaryLine(l.text);
+  const textRow = (l: Line) => findAmounts(l.text).length === 0 && meaningfulLetters(l.text) >= 3
+    && !isSummaryLine(l.text) && !isHeader(l) && !READING_RE.test(l.text);
+  const close = (a: Line, b: Line) => a.page === b.page
+    && (a.y === undefined || b.y === undefined || Math.abs(a.y - b.y) <= 1.7 * Math.max(a.h ?? 1, b.h ?? 1));
+
+  const tryDir = (dir: 1 | -1) => {
+    const used = new Set<number>();
+    const pairs = new Map<number, string>();
+    lines.forEach((l, i) => {
+      if (!amountRow(l)) return;
+      const j = i + dir;
+      const n = lines[j];
+      if (n && !used.has(j) && textRow(n) && close(l, n)) { used.add(j); pairs.set(i, n.text); }
+    });
+    return pairs;
+  };
+  const below = tryDir(1);
+  const above = tryDir(-1);
+  return below.size >= above.size ? below : above;
 }
 
 interface RawLineItem { item: ParsedItem; month: string | null }
@@ -331,34 +403,43 @@ function parseLineItems(lines: Line[], kind: StatementKind, period: { month: num
   const notes: string[] = [];
   let columns: Column[] | null = null;
   let inTable = false;
+  let vatColumn = false;
   const raw: RawLineItem[] = [];
+  const isHeader = (l: Line) => !!detectColumns(l) && findAmounts(l.text).length === 0;
+  const borrowed = pairDescriptions(lines, isHeader);
 
-  for (const line of lines) {
-    const text = line.text;
+  lines.forEach((line, idx) => {
     const header = detectColumns(line);
-    if (header && findAmounts(text).length === 0) { columns = header; inTable = true; continue; }
+    if (header && findAmounts(line.text).length === 0) {
+      columns = header;
+      inTable = true;
+      if (header.some(c => c.role === 'vat' || c.role === 'excl')) vatColumn = true;
+      return;
+    }
+    const text = borrowed.has(idx) ? `${borrowed.get(idx)}  ${line.text}` : line.text;
 
-    if (isSummaryLine(text)) continue;
+    if (isSummaryLine(text)) return;
     const desc = describe(text);
-    if (desc.replace(/[^a-z]/gi, '').length < 3) continue;
-    if (READING_RE.test(text)) continue;
+    if (desc.replace(/[^a-z]/gi, '').length < 3) return;
+    if (READING_RE.test(text)) return;
 
     // Amounts with their x position (right edge of the cell they sit in).
     const found: { value: number; x2: number }[] = [];
     for (const cell of line.cells) {
       for (const a of findAmounts(cell.str)) found.push({ value: a.value, x2: cell.x2 });
     }
-    if (found.length === 0) continue;
+    if (found.length === 0) return;
 
     let value: number | null = null;
     let isCredit = false;
 
-    if (columns && columns.length) {
+    const cols = columns as Column[] | null;
+    if (cols && cols.length) {
       const byRole: Partial<Record<ColumnRole, number>> = {};
       for (const f of found) {
         let best: Column | null = null;
         let bestDist = Infinity;
-        for (const c of columns) {
+        for (const c of cols) {
           const dist = Math.abs(c.x2 - f.x2);
           if (dist < bestDist) { bestDist = dist; best = c; }
         }
@@ -370,32 +451,35 @@ function parseLineItems(lines: Line[], kind: StatementKind, period: { month: num
     }
     if (value === null && !isCredit) {
       const v = found.map(f => f.value);
-      if (v.length >= 3 && near(v[v.length - 3] + v[v.length - 2], v[v.length - 1], 0.06)) value = v[v.length - 1]; // excl + VAT = incl
+      if (v.length >= 3 && near(v[v.length - 3] + v[v.length - 2], v[v.length - 1], 0.06)) { value = v[v.length - 1]; vatColumn = true; } // excl + VAT = incl
       else if (v.length === 1) value = v[0];
       else value = kind === 'levy' ? v[0] : v[v.length - 1]; // levy: amount then running balance
     }
 
-    if (isCredit || value === null) continue;
-    if (PAYMENT_RE.test(desc)) continue;
-    if (value <= 0.005) continue;
+    if (isCredit || value === null) return;
+    if (PAYMENT_RE.test(desc)) return;
+    if (value <= 0.005) return;
 
-    const category = classify(desc);
+    const named = meaningfulLetters(text) >= 3;
+    const category = (named ? classify(desc) : null) ?? classifyReference(text);
     const dates = findDates(text);
     const month = dates.length ? dates[0].iso.slice(0, 7) : null;
     if (/\b(vat|btw)\b/i.test(desc) && !category) {
       raw.push({ item: makeItem('sundry', value, 'VAT'), month });
-      continue;
+      return;
     }
     if (!category) {
       // Unknown description: only keep it when it is clearly a table row.
-      if (!(inTable || month) || kind === 'municipal') continue;
-      raw.push({ item: makeItem('sundry', value, cleanLabel(desc)), month });
-      continue;
+      if (!(inTable || month) || kind === 'municipal') return;
+      const ref = /\b[A-Z]{1,5}\d{3,}[A-Z0-9/-]*\b/.exec(text)?.[0];
+      const label = cleanLabel(desc);
+      raw.push({ item: makeItem('sundry', value, label === 'Other charge' && ref ? `Other charge (${ref})` : label), month });
+      return;
     }
     const item = makeItem(category, value);
     Object.assign(item, readMeter([text]));
     raw.push({ item, month });
-  }
+  });
 
   // A transaction list may cover several months — keep only the statement's month.
   let kept = raw;
@@ -410,7 +494,7 @@ function parseLineItems(lines: Line[], kind: StatementKind, period: { month: num
       notes.push(`This statement lists several months. Only charges dated ${m}/${y} were read; ${skipped} older line${skipped === 1 ? ' was' : 's were'} left out.`);
     }
   }
-  return { strategy: 'lineItems', items: kept.map(r => r.item), confirmed: false, notes };
+  return { strategy: 'lineItems', items: kept.map(r => r.item), confirmed: false, vatInItems: vatColumn, notes };
 }
 
 // ── Statement-level facts ───────────────────────────────────
@@ -425,6 +509,49 @@ const ISSUERS: { name: string; re: RegExp }[] = [
   { name: 'Mangaung Metro', re: /mangaung/i },
   { name: 'Buffalo City', re: /buffalo city/i },
 ];
+
+type SummaryRole = 'previous' | 'excl' | 'vat' | 'incl' | 'due';
+
+/** What a summary label refers to, e.g. "Current Charges (Excl VAT)" → 'excl'. */
+function summaryRole(label: string): SummaryRole | null {
+  const l = label.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!l || l.length > 48) return null;
+  if (/previous (account )?balance|balance brought forward|brought forward|opening balance|balance b\/?f|vorige balans|saldo oorgebring/.test(l)) return 'previous';
+  if (/excl/.test(l) && /current|charges?|month|sub ?total|amount/.test(l)) return 'excl';
+  if (/^\W*(plus\s*|add\s*)?(total\s*)?(vat|btw)\b/.test(l) && !/incl|excl|reg|no\b|number/.test(l)) return 'vat';
+  if (/current charges?[^\n]*incl|total current|current (charges?|month'?s? (charges?|total))|total (charges|levies) (for )?(the |this )?(month|period)|huidige heffings/.test(l)) return 'incl';
+  if (/total (amount )?(due|payable)|amount (due|payable)|balance due|total outstanding|closing balance|totaal verskuldig|bedrag betaalbaar/.test(l)) return 'due';
+  return null;
+}
+
+/**
+ * Summary printed as a table: a row of labels with the amounts on the next
+ * row ("Previous Balance | Payments | Current Charges (Excl VAT) | VAT | Total Due").
+ */
+function readSummaryTable(lines: Line[]): Partial<Record<SummaryRole, number>> {
+  const out: Partial<Record<SummaryRole, number>> = {};
+  lines.forEach((line, i) => {
+    if (findAmounts(line.text).length) return;
+    const labels = line.cells.map(c => ({ c, role: summaryRole(c.str) })).filter(x => x.role);
+    if (labels.length < 2) return;
+    const next = lines[i + 1];
+    if (!next || next.page !== line.page) return;
+    const values = next.cells.flatMap(c => findAmounts(c.str).map(a => ({ value: a.value, x: c.x, x2: c.x2 })));
+    if (values.length < labels.length) return;
+    const mid = (a: { x: number; x2: number }) => (a.x + a.x2) / 2;
+    for (const { c, role } of labels) {
+      let best: typeof values[number] | null = null;
+      let bestScore = -Infinity;
+      for (const v of values) {
+        const overlap = Math.min(c.x2, v.x2) - Math.max(c.x, v.x);
+        const score = overlap > 0 ? 1000 + overlap : -Math.abs(mid(c) - mid(v));
+        if (score > bestScore) { bestScore = score; best = v; }
+      }
+      if (best && out[role!] === undefined) out[role!] = best.value;
+    }
+  });
+  return out;
+}
 
 function lastAmount(text: string): number | undefined {
   const a = findAmounts(text);
@@ -453,8 +580,9 @@ function readFacts(lines: Line[]): Facts {
   const count = (re: RegExp) => (all.match(re) || []).length;
   const levyScore = count(/body corporate|regspersoon|sectional title|deeltitel|home\s?owners|\bhoa\b|managing agent|bestuursagent|trustees|\bcsos\b|reserve fund|\blev(y|ies)\b|heffing/gi);
   const muniScore = count(/municipal|munisipal|city of|metro\b|property rates|tax invoice|stand no|\berf\b|pikitup|city power|refuse|sewer/gi);
+  const strongLevy = /body corporate|regspersoon|home\s?owners'? association|\bhoa\b|managing agent|bestuursagent|sectional title scheme|\bcsos\b|reserve fund/i.test(all);
   if (facts.issuer) facts.kind = 'municipal';
-  else if (levyScore > muniScore) facts.kind = 'levy';
+  else if (strongLevy || levyScore > muniScore) facts.kind = 'levy';
   else if (muniScore > 0) facts.kind = 'municipal';
   if (!facts.issuer && facts.kind === 'municipal') {
     const m = /([A-Z][\w'’-]+(?: [A-Z][\w'’-]+){0,3}) (Local |Metropolitan |District )?Municipality/.exec(all);
@@ -462,6 +590,7 @@ function readFacts(lines: Line[]): Facts {
   }
 
   let exclIndex = -10;
+  const vatCandidates: { idx: number; amount: number }[] = [];
   lines.forEach((line, idx) => {
     const t = line.text;
     const low = t.toLowerCase();
@@ -474,8 +603,8 @@ function readFacts(lines: Line[]): Facts {
         if (facts.currentExcl === undefined) { facts.currentExcl = amount; exclIndex = idx; }
       } else if (/current charges?[^\n]*incl|total current|current (charges?|month'?s? (charges?|total))|total (charges|levies) (for )?(the |this )?(month|period)|huidige heffings/.test(low)) {
         if (facts.currentIncl === undefined) facts.currentIncl = amount;
-      } else if (facts.vat === undefined && idx - exclIndex <= 2 && /^\W*(plus\s*)?(total\s*)?(vat|btw)\b/.test(low)) {
-        facts.vat = amount;
+      } else if (facts.vat === undefined && /^\W*(plus\s*|add\s*)?(total\s*)?(vat|btw)\b/.test(low) && !/reg|no\.|number/.test(low)) {
+        vatCandidates.push({ idx, amount });
       } else if (facts.totalDue === undefined && /total (amount )?(due|payable)|amount (due|payable)|balance due|total outstanding|closing balance|totaal verskuldig|bedrag betaalbaar/.test(low)) {
         facts.totalDue = amount;
       }
@@ -499,6 +628,24 @@ function readFacts(lines: Line[]): Facts {
     }
   });
 
+  // VAT printed in the summary, next to the excl-VAT figure (not a per-service VAT line).
+  const nearVat = vatCandidates.find(v => Math.abs(v.idx - exclIndex) <= 4);
+  if (nearVat) facts.vat = nearVat.amount;
+
+  // Summary laid out as a table.
+  const table = readSummaryTable(lines);
+  facts.previousBalance ??= table.previous;
+  facts.currentExcl ??= table.excl;
+  facts.vat ??= table.vat;
+  facts.currentIncl ??= table.incl;
+  facts.totalDue ??= table.due;
+
+  // Fill in whichever of excl / VAT / incl can be derived from the other two.
+  if (facts.vat === undefined && facts.currentExcl !== undefined && facts.currentIncl !== undefined) {
+    const v = round2(facts.currentIncl - facts.currentExcl);
+    if (v > 0 && v < facts.currentExcl * 0.2) facts.vat = v;
+  }
+
   if (!facts.statementDate) {
     for (const line of lines.slice(0, 30)) {
       if (/reading|valuation|due|pay/i.test(line.text)) continue;
@@ -520,7 +667,9 @@ const fmt = (n: number) => formatCurrency(n);
 function aggregate(items: ParsedItem[]): ParsedItem[] {
   const out: ParsedItem[] = [];
   for (const it of items) {
-    const same = out.find(o => o.category === it.category && o.label === it.label);
+    // Only merge repeats of a recognised service (e.g. two electricity meters);
+    // unrecognised charges always stay on their own lines.
+    const same = it.category === 'sundry' ? undefined : out.find(o => o.category === it.category && o.label === it.label);
     if (same) {
       same.amount = round2(same.amount + it.amount);
       if (same.consumption && it.consumption && same.consumption.unit === it.consumption.unit) {
@@ -572,13 +721,34 @@ export function parseStatement(lines: Line[], method: 'text' | 'ocr' = 'text'): 
     }
   }
 
+  // ── VAT ────────────────────────────────────────────────
+  // Some municipalities (City of Johannesburg among them) list each service
+  // EXCLUDING VAT and show the VAT only in the summary. Landlords pay — and
+  // recover — the VAT-inclusive amount, so VAT is added to the services
+  // that carry it (electricity, water, sewer, refuse) whenever the totals
+  // show the listed amounts are excl. VAT.
+  const vatableBase = (items: ParsedItem[]) => items.filter(i => i.vatable).reduce((s, i) => s + i.amount, 0);
+  const vatRatioFor = (items: ParsedItem[]) => {
+    const base = vatableBase(items);
+    if (facts.vat && base > 0) {
+      const r = facts.vat / base;
+      if (r > 0.1 && r < 0.16) return 1 + r;
+    }
+    return 1.15;
+  };
+  const withVat = (items: ParsedItem[]) => {
+    const ratio = vatRatioFor(items);
+    return items.map(i => (i.vatable ? { ...i, amount: round2(i.amount * ratio) } : { ...i }));
+  };
+  const inclTargets = [targetIncl, ...(facts.kind === 'municipal' ? derived : [])].filter((t): t is number => t !== undefined);
+  const hitsIncl = (items: ParsedItem[]) => items.length > 0 && inclTargets.some(t => near(sum(items), t, 1));
+
   type Match = 'incl' | 'excl' | null;
   const matchOf = (c: Candidate): Match => {
-    const total = sum(c.items);
     if (!c.items.length) return null;
-    if (targetIncl !== undefined && near(total, targetIncl, 1)) return 'incl';
-    if (facts.currentExcl !== undefined && facts.vat && near(total, facts.currentExcl, 1)) return 'excl';
-    if (facts.kind === 'municipal' && derived.some(t => near(total, t, 1))) return 'incl';
+    if (hitsIncl(c.items)) return 'incl';
+    if (facts.currentExcl !== undefined && near(sum(c.items), facts.currentExcl, 1) && (facts.vat || inclTargets.length)) return 'excl';
+    if (!c.vatInItems && hitsIncl(withVat(c.items))) return 'excl';
     return null;
   };
   const score = (c: Candidate) =>
@@ -590,15 +760,21 @@ export function parseStatement(lines: Line[], method: 'text' | 'ocr' = 'text'): 
   let items = best ? best.items : [];
   if (best) warnings.push(...best.notes);
 
-  // Items matched the excl-VAT total: add VAT so the amounts are what was billed.
-  if (match === 'excl' && facts.vat) {
-    const vatable = items.filter(i => i.category !== 'rates' && i.category !== 'interest');
-    const base = vatable.reduce((s, i) => s + i.amount, 0);
-    if (base > 0) {
-      const ratio = 1 + facts.vat / base;
-      vatable.forEach(i => { i.amount = round2(i.amount * ratio); });
-      warnings.push('Amounts were listed excluding VAT; VAT has been added to each service.');
-    }
+  const vatRatio = round2(vatRatioFor(items) * 10000) / 10000;
+  let vatAdded = false;
+  const vatableNames = () => items.filter(i => i.vatable).map(i => i.label.toLowerCase());
+  if (match === 'excl' && items.some(i => i.vatable)) {
+    items = withVat(items);
+    vatAdded = true;
+    warnings.push(`This statement lists services excluding VAT. VAT has been added to ${vatableNames().join(', ')} so the amounts match what you were billed.`);
+  } else if (
+    match === null && facts.kind === 'municipal' && best && !best.vatInItems && items.some(i => i.vatable)
+    && (facts.issuer === 'City of Johannesburg' || /excl(\.|uding|usive)?\s*(of\s*)?vat|vat\s*excl/i.test(lines.map(l => l.text).join('\n')))
+  ) {
+    // No totals to check against, but this municipality lists services ex VAT.
+    items = withVat(items);
+    vatAdded = true;
+    warnings.push(`${facts.issuer ?? 'This municipality'} lists services excluding VAT, so 15% VAT has been added to ${vatableNames().join(', ')}. Switch it off below if this statement already includes VAT.`);
   }
 
   items = aggregate(items);
@@ -654,6 +830,8 @@ export function parseStatement(lines: Line[], method: 'text' | 'ocr' = 'text'): 
       totalDue: facts.totalDue,
     },
     reconciled,
+    vatAdded,
+    vatRatio,
     confidence,
     warnings,
     method,

@@ -143,3 +143,80 @@ export const COJ_LOST_MINUS = COJ.replace('-215.40', '215.40');
 
 // OCR slips in both a detail line and the "current charges" summary figure.
 export const COJ_MISREAD_SUMMARY = COJ.replace('-215.40', '215.40').replace(/919\.04/, '910.04').replace('4,094.88', '4,004.88');
+
+// ── Layouts reported from real use ──────────────────────────
+
+// CoJ: each service listed EXCLUDING VAT (no VAT lines in the sections);
+// the summary is a table — labels on one row, amounts on the next.
+export const COJ_EXCL_TABLE = `
+City of Johannesburg                                         TAX INVOICE
+Date  2026/10/06          Statement for  October 2026      Account Number  550123456
+Previous Balance    Payments     Current Charges (Excl VAT)    VAT        Total Due
+   4,210.33        -4,210.33              4,094.88            508.69      4,603.57
+Due Date  2026/10/21
+
+Property Rates
+Market Value: R 1,280,000.00 ; Billing Period 2026/10                          919.04
+Less rates on first R300 000.00 of market value                              -215.40
+                                                                              703.64
+City Power
+Meter: 9000123456; Consumption: 623.000 kWh; Type: Actual
+Charge: Step 1    500.000 kWh @ R 2.1234 = R 1,061.70
+Charge: Step 2    123.000 kWh @ R 2.4368 = R 299.73
+Service charge                                                                184.56
+Network charge                                                                600.52
+                                                                            2,146.51
+Johannesburg Water
+Meter: W7700123; Consumption: 18.000 KL; Type: Actual
+Water consumption                                                             437.64
+Water Demand Management Levy                                                   65.09
+Sewer monthly charge based on stand size 496 m2                               432.00
+                                                                              934.73
+PIKITUP
+Refuse Residential                                                            310.00
+                                                                              310.00
+`;
+
+// Same CoJ layout but the summary box could not be read at all.
+export const COJ_EXCL_NO_SUMMARY = COJ_EXCL_TABLE
+  .split('\n').filter(l => !/Previous Balance|4,210\.33/.test(l)).join('\n');
+
+// Levy transaction list where each description sits on the line BELOW the
+// date / reference / amounts (wrapped table cells in the PDF).
+export const LEVY_SPLIT_ROWS = `
+SUNSET VIEW BODY CORPORATE (SS 123/2008)
+Levy Statement                                   Statement date: 01/08/2026
+Unit 14 - Section 14                             Account no: SUN014
+Date          Reference     Description                         Debit        Credit       Balance
+01/08/2026    LEV0826                                          1,850.00                  1,850.00
+              Levy - Administrative Fund
+01/08/2026    RES0826                                            277.50                  2,127.50
+              Reserve Fund contribution
+01/08/2026    WAT0726                                            398.20                  2,525.70
+              Water recovery (11 kl)
+01/08/2026    CSOS0826                                            27.00                  2,552.70
+              CSOS Levy
+Total amount due                                                                         2,552.70
+`;
+
+// Levy statement whose rows carry only reference codes (no description text).
+export const LEVY_CODES_ONLY = `
+HILLTOP BODY CORPORATE
+Levy Statement                                   Statement date: 01/09/2026
+Date          Reference        Debit        Credit       Balance
+01/09/2026    LEV0926       1,850.00                     1,850.00
+01/09/2026    RES0926         277.50                     2,127.50
+01/09/2026    WAT0826         398.20                     2,525.70
+Total amount due                                         2,525.70
+`;
+
+// "Sundry" block on a levy statement listing several different charges.
+export const LEVY_SUNDRY_BLOCK = `
+PARKVIEW BODY CORPORATE
+Statement for September 2026          Account no: PV0007
+Admin levy                                                  1,600.00
+Sundry charges
+Water consumption                                             412.80
+Reserve fund levy                                             240.00
+Total due                                                   2,252.80
+`;

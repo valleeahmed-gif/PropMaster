@@ -168,3 +168,56 @@ describe('unreadable input', () => {
     expect(r.confidence).toBe('low');
   });
 });
+
+describe('reported: CoJ amounts listed excluding VAT', () => {
+  it('reads a table-style summary and adds VAT to each utility', () => {
+    const r = read(fx.COJ_EXCL_TABLE);
+    expect(r.totals.currentCharges).toBe(4603.57);
+    expect(r.totals.vat).toBe(508.69);
+    expect(amounts(r)).toEqual({
+      'Electricity': 2468.49, 'Water & Sanitation': 1074.94, 'Refuse Removal': 356.5, 'Rates': 703.64,
+    });
+    expect(r.vatAdded).toBe(true);
+    expect(r.reconciled).toBe(true);
+    expect(r.items.find(i => i.category === 'rates')!.vatable).toBe(false);
+  });
+  it('adds 15% VAT for CoJ even when the summary cannot be read', () => {
+    const r = read(fx.COJ_EXCL_NO_SUMMARY);
+    expect(r.vatAdded).toBe(true);
+    expect(amounts(r)).toEqual({
+      'Electricity': 2468.49, 'Water & Sanitation': 1074.94, 'Refuse Removal': 356.5, 'Rates': 703.64,
+    });
+    expect(r.warnings.join(' ')).toMatch(/excluding VAT/);
+  });
+  it('does not add VAT twice when sections already include it', () => {
+    const r = read(fx.COJ);
+    expect(r.vatAdded).toBe(false);
+    expect(r.items.find(i => i.category === 'electricity')!.amount).toBe(2468.49);
+  });
+});
+
+describe('reported: levy lines merged into "Sundry"', () => {
+  it('takes descriptions that sit on the line below the amounts', () => {
+    const r = read(fx.LEVY_SPLIT_ROWS);
+    expect(amounts(r)).toEqual({ 'Water': 398.2, 'Levy': 1850, 'Reserve Fund Levy': 277.5, 'CSOS Levy': 27 });
+    expect(r.items.some(i => i.label === 'Sundry')).toBe(false);
+  });
+  it('recognises rows from their reference codes alone', () => {
+    const r = read(fx.LEVY_CODES_ONLY);
+    expect(amounts(r)).toEqual({ 'Water': 398.2, 'Levy': 1850, 'Reserve Fund Levy': 277.5 });
+  });
+  it('keeps each charge under a "Sundry" heading separate', () => {
+    const r = read(fx.LEVY_SUNDRY_BLOCK);
+    expect(amounts(r)).toEqual({ 'Water': 412.8, 'Levy': 1600, 'Reserve Fund Levy': 240 });
+    expect(r.reconciled).toBe(true);
+  });
+  it('never merges two unrecognised charges into one line', () => {
+    const r = read(`
+SUNSET VIEW BODY CORPORATE
+Date          Description                 Debit        Balance
+01/08/2026    Garden service              350.00         350.00
+01/08/2026    Pool maintenance            420.00         770.00
+`);
+    expect(r.items.map(i => [i.label, i.amount])).toEqual([['Garden service', 350], ['Pool maintenance', 420]]);
+  });
+});

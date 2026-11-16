@@ -6,14 +6,16 @@ import { Cell, Line } from './types';
  */
 export function linesFromText(text: string, page = 1): Line[] {
   const out: Line[] = [];
+  let row = 0;
   for (const raw of text.replace(/\r/g, '').split('\n')) {
+    row++;
     const expanded = raw.replace(/\t/g, '    ');
     if (!expanded.trim()) continue;
     const cells: Cell[] = [];
     const re = /\S+(?: \S+)*/g;
     let m: RegExpExecArray | null;
     while ((m = re.exec(expanded))) cells.push({ str: m[0], x: m.index, x2: m.index + m[0].length });
-    out.push({ text: cells.map(c => c.str).join('  '), cells, page });
+    out.push({ text: cells.map(c => c.str).join('  '), cells, page, y: row, h: 1 });
   }
   return out;
 }
@@ -77,7 +79,10 @@ export function linesFromFragments(fragments: Fragment[], page: number): Line[] 
     }
     for (const c of cells) c.str = c.str.trim();
     const kept = cells.filter(c => c.str);
-    if (kept.length) lines.push({ text: kept.map(c => c.str).join('  '), cells: kept, page });
+    if (kept.length) {
+      const h = Math.max(...row.map(f => f.height || 8));
+      lines.push({ text: kept.map(c => c.str).join('  '), cells: kept, page, y: -row[0].y, h });
+    }
   }
   return lines;
 }

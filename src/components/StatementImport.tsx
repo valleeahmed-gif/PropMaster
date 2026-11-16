@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle, FileText, Lock, RotateCcw, ShieldCheck } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { FileUpload, Modal, Select, Spinner } from './UI';
+import { FileUpload, Modal, Select, Spinner, Toggle } from './UI';
 import { StatementExtract } from '../types';
 import { errorMessage, formatCurrency, formatDate, formatMonthYear, MONTHS } from '../utils';
 import type { ParsedStatement, ReadProgress } from '../lib/statements';
@@ -19,6 +19,8 @@ interface ReviewItem {
   label: string;
   amount: string;
   isRecoverable: boolean;
+  /** Carries VAT (electricity, water, sewer, refuse). */
+  vatable: boolean;
   selected: boolean;
   note?: string;
 }
@@ -60,6 +62,7 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
   const [month, setMonth] = useState(defaultMonth);
   const [year, setYear] = useState(defaultYear);
   const [saving, setSaving] = useState(false);
+  const [vatOn, setVatOn] = useState(false);
 
   const thisYear = new Date().getFullYear();
   const years = Array.from(new Set([thisYear - 3, thisYear - 2, thisYear - 1, thisYear, thisYear + 1, year])).sort();
@@ -100,12 +103,14 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
         label: i.label,
         amount: i.amount.toFixed(2),
         isRecoverable: i.isRecoverable,
+        vatable: i.vatable,
         selected: true,
         note: [
           i.consumption ? `${i.consumption.value.toLocaleString('en-ZA')} ${i.consumption.unit}` : null,
           i.readingType === 'estimated' ? 'estimated reading' : i.readingType === 'actual' ? 'actual reading' : null,
         ].filter(Boolean).join(' · ') || undefined,
       })));
+      setVatOn(result.vatAdded);
       setParsed(result);
     } catch (err) {
       setError(errorMessage(err, 'Something went wrong reading this file. Please try again.'));
@@ -181,6 +186,20 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
       setSaving(false);
     }
   };
+
+  // Add or remove VAT on the services that carry it, keeping any edits.
+  const toggleVat = (on: boolean) => {
+    const ratio = parsed?.vatRatio || 1.15;
+    setVatOn(on);
+    setItems(prev => prev.map(i => {
+      if (!i.vatable) return i;
+      const n = Number(i.amount);
+      if (!Number.isFinite(n)) return i;
+      return { ...i, amount: (Math.round((on ? n * ratio : n / ratio) * 100) / 100).toFixed(2) };
+    }));
+  };
+  const showVatSwitch = !!parsed && parsed.kind !== 'levy' && items.some(i => i.vatable);
+  const statementTotal = parsed?.totals.currentCharges;
 
   const update = (i: number, patch: Partial<ReviewItem>) =>
     setItems(prev => prev.map((x, j) => (j === i ? { ...x, ...patch } : x)));
@@ -308,6 +327,19 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
               )}
             </div>
 
+            {showVatSwitch && (
+              <div className="flex items-start justify-between gap-4 p-3.5 rounded-xl border border-surface-200 bg-surface-50">
+                <div className="text-xs text-ink-600">
+                  <p className="text-sm font-semibold text-ink-900">Add 15% VAT to utilities</p>
+                  <p className="mt-0.5">
+                    For statements that list electricity, water, sewer and refuse excluding VAT (City of Johannesburg does).
+                    Rates and levies are never changed.
+                  </p>
+                </div>
+                <Toggle checked={vatOn} onChange={toggleVat} label={undefined} />
+              </div>
+            )}
+
             {/* Items */}
             <div>
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
@@ -374,6 +406,15 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
                   <span>Total adding</span>
                   <span>{formatCurrency(sumOf(selected))}</span>
                 </div>
+                {statementTotal !== undefined && (
+                  Math.abs(sumOf(items) - statementTotal) <= 1 ? (
+                    <p className="text-xs text-green-700 font-medium text-right">✓ Matches the statement's current charges</p>
+                  ) : (
+                    <p className="text-xs text-amber-700 font-medium text-right">
+                      Statement's current charges: {formatCurrency(statementTotal)} (difference {formatCurrency(sumOf(items) - statementTotal)})
+                    </p>
+                  )
+                )}
               </div>
             )}
 

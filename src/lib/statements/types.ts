@@ -12,6 +12,10 @@ export interface Line {
   text: string;
   cells: Cell[];
   page: number;
+  /** Vertical position, increasing down the page (line index for plain text). */
+  y?: number;
+  /** Line height in the same units as y. */
+  h?: number;
 }
 
 export type ChargeCategory =
@@ -26,6 +30,8 @@ export interface ParsedItem {
   amount: number;
   /** True for usage charges a tenant normally pays (electricity, water, refuse…). */
   isRecoverable: boolean;
+  /** Municipal services that carry 15% VAT (electricity, water, sewer, refuse, gas). */
+  vatable: boolean;
   category: ChargeCategory;
   /** Metered usage when printed, e.g. { value: 623, unit: 'kWh' }. */
   consumption?: { value: number; unit: 'kWh' | 'kl' };
@@ -56,6 +62,10 @@ export interface ParsedStatement {
   };
   /** true = items add up to the statement's own current-charges total; null = no total to check against. */
   reconciled: boolean | null;
+  /** The statement listed services excluding VAT and the reader added it. */
+  vatAdded: boolean;
+  /** Multiplier the reader used (or would use) to add VAT to vatable items, e.g. 1.15. */
+  vatRatio: number;
   confidence: Confidence;
   /** Human-readable notes for the reviewer. */
   warnings: string[];

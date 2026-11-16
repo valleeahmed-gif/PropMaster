@@ -51,6 +51,26 @@ const RECOVERABLE = new Set<ChargeCategory>(['electricity', 'water', 'sewerage',
 /** Usage-based charges a tenant normally pays; ownership costs (rates, levies) default to the owner. */
 export const isRecoverable = (c: ChargeCategory) => RECOVERABLE.has(c);
 
+/** Municipal services that carry VAT. Property rates, interest and body corporate levies do not. */
+export const isVatable = (c: ChargeCategory) => RECOVERABLE.has(c);
+
+/**
+ * Category from a transaction reference code such as "WAT0726" or
+ * "RES0826", used when a row has no readable description.
+ */
+export function classifyReference(text: string): ChargeCategory | null {
+  const m = /\b(ELEC?|ELE|WAT|WTR|SEW|SAN|REF|RFS|GAS|RES|RSV|LEV|LVY|ADM|SPL|SPEC|CSOS|INS|SEC|INT|RAT)[-_]?\d{2,}/i.exec(text);
+  if (!m) return null;
+  const code = m[1].toUpperCase();
+  const map: Record<string, ChargeCategory> = {
+    ELE: 'electricity', ELEC: 'electricity', WAT: 'water', WTR: 'water', SEW: 'sewerage', SAN: 'sewerage',
+    REF: 'refuse', RFS: 'refuse', GAS: 'gas', RES: 'reserve_levy', RSV: 'reserve_levy', LEV: 'levy', LVY: 'levy',
+    ADM: 'levy', SPL: 'special_levy', SPEC: 'special_levy', CSOS: 'csos', INS: 'insurance', SEC: 'security',
+    INT: 'interest', RAT: 'rates',
+  };
+  return map[code] ?? null;
+}
+
 /** Display order for extracted items. */
 export const CATEGORY_ORDER: ChargeCategory[] = [
   'electricity', 'water_sanitation', 'water', 'sewerage', 'refuse', 'gas',
