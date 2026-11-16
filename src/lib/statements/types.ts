@@ -37,7 +37,16 @@ export interface ParsedItem {
   consumption?: { value: number; unit: 'kWh' | 'kl' };
   /** Whether the meter reading was actual or estimated, when stated. */
   readingType?: 'actual' | 'estimated';
+  /**
+   * The individual charge lines behind this item (consumption, service
+   * charge, network charge, sewer…), when the statement lists more than one.
+   * Their amounts add up to `amount`.
+   */
+  details?: ParsedDetail[];
 }
+
+/** One charge line inside a service section. */
+export type ParsedDetail = Omit<ParsedItem, 'details'>;
 
 export type StatementKind = 'municipal' | 'levy' | 'unknown';
 export type Confidence = 'high' | 'medium' | 'low';

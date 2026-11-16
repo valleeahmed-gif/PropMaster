@@ -11,7 +11,7 @@
 //   line items — table / transaction-list style used by most other
 //                municipalities and by managing agents' levy statements.
 
-import { ChargeCategory, Confidence, Line, ParsedItem, ParsedStatement, StatementKind } from './types';
+import { ChargeCategory, Confidence, Line, ParsedDetail, ParsedItem, ParsedStatement, StatementKind } from './types';
 import { CATEGORY_ORDER, classify, classifyReference, isRecoverable, isVatable, labelFor } from './classify';
 import { findAmounts, findDates, findMonthYear, near, round2, stripAmounts } from './money';
 import { formatCurrency } from '../../utils';
@@ -208,6 +208,105 @@ function makeItem(category: ChargeCategory, amount: number, label?: string): Par
   };
 }
 
+// ── Charge lines inside a service section ───────────────────
+
+const SERVICE_NAME: Partial<Record<ChargeCategory, string>> = {
+  electricity: 'Electricity', water: 'Water', water_sanitation: 'Water', sewerage: 'Sewer', refuse: 'Refuse', gas: 'Gas',
+};
+
+/** A readable name for one charge line, e.g. "Network charge". */
+function detailLabel(text: string, service: string): string {
+  let d = describe(text).split(/[;=@]|\bbilling period\b|\bbased on\b|\breading period\b/i)[0];
+  d = d.replace(/\b\d[\d.,]*\s*(kwh|kl|kℓ|kva|kw|m2|m²|units?|days?)\b/gi, ' ')
+       .replace(/^\W*charges?\s*:\s*/i, '')
+       .replace(/[\s:,\-–]+$/, '')
+       .replace(/\s+/g, ' ')
+       .trim();
+  if (d.replace(/[^a-z]/gi, '').length < 3) return `${service} charge`;
+  d = d.charAt(0).toUpperCase() + d.slice(1);
+  return d.length > 48 ? d.slice(0, 48).trim() : d;
+}
+
+/**
+ * The separate charges inside a section — consumption (tariff steps merged),
+ * service / network charges, levies, sewer — so each can be given its own
+ * "who pays". Returns [] when the lines do not add up to the section total,
+ * so a breakdown is only offered when it is trustworthy.
+ */
+function sectionDetails(sec: Section, res: SectionResult): ParsedDetail[] {
+  if (sec.category === 'rates' || sec.category === 'sundry') return [];
+  const service = SERVICE_NAME[sec.category] ?? labelFor(sec.category);
+  const baseCategory: ChargeCategory = sec.category === 'water_sanitation' ? 'water' : sec.category;
+  const mk = (label: string, category: ChargeCategory): ParsedDetail => ({
+    label, amount: 0, category, isRecoverable: isRecoverable(category), vatable: isVatable(category),
+  });
+  const out: ParsedDetail[] = [];
+  let consumption: ParsedDetail | null = null;
+  let vatSum = 0;
+
+  for (const t of sec.lines) {
+    if (READING_RE.test(t)) continue;
+    const amounts = chargeAmounts(t);
+    if (!amounts.length) continue;
+    const desc = describe(t);
+    if (desc.replace(/[^a-z]/gi, '').length === 0) continue;                                  // printed subtotal
+    if (/^\W*((sub\s?-?)?total|totaal|amount incl|incl(uding|\.)?\s*vat)/i.test(desc)) continue;
+    const value = amounts[amounts.length - 1];
+    if (/\b(vat|btw)\b/i.test(desc)) { vatSum += value; continue; }
+
+    // Tariff steps / blocks of one meter are one cost: consumption.
+    if (/^\W*(charges?\s*:?\s*)?(step|block|tier|trap|blok)\s*\d/i.test(desc)) {
+      if (!consumption) { consumption = mk(`${service} consumption`, baseCategory); out.push(consumption); }
+      consumption.amount += value;
+      continue;
+    }
+    if (value < 0) {
+      // Rebate / credit: net it off the line above; if that is not possible, no breakdown.
+      const prev = out[out.length - 1];
+      if (!prev || prev.amount + value <= 0) return [];
+      prev.amount += value;
+      continue;
+    }
+    if (value === 0) continue;
+
+    let label = detailLabel(t, service);
+    const own = classify(label);
+    const category = own && isVatable(own) && own !== 'water_sanitation' ? own : baseCategory;
+    // "Service charge" on its own says nothing — say whose it is.
+    if (!(own && isVatable(own))) label = `${service} – ${label}`;
+    const same = out.find(o => o.label === label);
+    if (same) same.amount += value;
+    else { const d = mk(label, category); d.amount = value; out.push(d); }
+  }
+
+  const kept = out.filter(d => d.amount > 0.005).map(d => ({ ...d, amount: round2(d.amount) }));
+  if (kept.length < 2) return [];
+  const linesTotal = kept.reduce((s, d) => s + d.amount, 0);
+  if (!near(linesTotal + vatSum, res.total, 0.11) && !near(linesTotal, res.total, 0.11)) return [];
+
+  // Meter facts belong on the consumption line.
+  const meter = readMeter([sec.headerText, ...sec.lines]);
+  const cons = kept.find(d => / consumption$/.test(d.label));
+  if (cons) Object.assign(cons, meter);
+  return kept;
+}
+
+/** Spread an item's final amount (VAT included) across its charge lines. */
+function settleDetails(item: ParsedItem): ParsedItem {
+  if (!item.details?.length) return item;
+  const raw = item.details.reduce((s, d) => s + d.amount, 0);
+  if (raw <= 0) { const { details: _drop, ...rest } = item; return rest; }
+  const factor = item.amount / raw;
+  let running = 0;
+  const details = item.details.map((d, i, arr) => {
+    const amount = i === arr.length - 1 ? round2(item.amount - running) : round2(d.amount * factor);
+    running += amount;
+    return { ...d, amount };
+  });
+  if (details.some(d => d.amount <= 0)) { const { details: _drop, ...rest } = item; return rest; }
+  return { ...item, details };
+}
+
 /** One item per charge line — used for "Sundry" blocks that list unrelated charges. */
 function itemsPerLine(lines: string[]): ParsedItem[] {
   const out: ParsedItem[] = [];
@@ -304,6 +403,8 @@ function parseSections(lines: Line[], targets: number[]): Candidate {
     }
     const item = makeItem(sec.category, res.total);
     Object.assign(item, readMeter([sec.headerText, ...sec.lines]));
+    const details = sectionDetails(sec, res);
+    if (details.length) item.details = details;
     raw.push({ item });
   });
 
@@ -315,6 +416,7 @@ function parseSections(lines: Line[], targets: number[]): Candidate {
     if (dup) {
       if (!dup.consumption && item.consumption) dup.consumption = item.consumption;
       if (!dup.readingType && item.readingType) dup.readingType = item.readingType;
+      if (!dup.details && item.details) dup.details = item.details;
       continue;
     }
     items.push(item);
@@ -707,6 +809,12 @@ function aggregate(items: ParsedItem[]): ParsedItem[] {
     // unrecognised charges always stay on their own lines.
     const same = it.category === 'sundry' ? undefined : out.find(o => o.category === it.category && o.label === it.label);
     if (same) {
+      if (same.details || it.details) {
+        const asLines = (x: ParsedItem): ParsedDetail[] => x.details ?? [{
+          label: x.label, amount: x.amount, category: x.category, isRecoverable: x.isRecoverable, vatable: x.vatable,
+        }];
+        same.details = [...asLines(same), ...asLines(it)];
+      }
       same.amount = round2(same.amount + it.amount);
       if (same.consumption && it.consumption && same.consumption.unit === it.consumption.unit) {
         same.consumption = { ...same.consumption, value: same.consumption.value + it.consumption.value };
@@ -819,7 +927,7 @@ export function parseStatement(lines: Line[], method: 'text' | 'ocr' = 'text'): 
     warnings.push(`${facts.issuer ?? 'This municipality'} lists services excluding VAT, so 15% VAT has been added to ${vatableNames().join(', ')}. Switch it off below if this statement already includes VAT.`);
   }
 
-  items = aggregate(items);
+  items = aggregate(items.map(settleDetails));
   const total = sum(items);
 
   let reconciled: boolean | null = null;

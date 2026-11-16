@@ -244,3 +244,47 @@ describe('real layout: WeconnectU body corporate statement', () => {
     expect(it2.items.find(i => i.category === 'water')!.isRecoverable).toBe(true);
   });
 });
+
+describe('full breakdown: every charge line separately', () => {
+  const r = read(fx.COJ);
+  const detail = (cat: string) => r.items.find(i => i.category === cat)!.details;
+  const total = (d: { amount: number }[]) => Math.round(d.reduce((s, x) => s + x.amount, 0) * 100) / 100;
+
+  it('splits electricity into consumption and each fixed charge', () => {
+    const d = detail('electricity')!;
+    expect(d.map(x => x.label)).toEqual(['Electricity consumption', 'Electricity – Service charge', 'Electricity – Network charge']);
+    expect(total(d)).toBe(2468.49);                       // still adds up to the section total incl. VAT
+    expect(d[0].amount).toBeCloseTo(1361.43 * 1.15, 1);   // steps 1 + 2 merged, VAT spread across lines
+    expect(d[0].consumption).toEqual({ value: 623, unit: 'kWh' });
+  });
+  it('splits water from sewer', () => {
+    const d = detail('water_sanitation')!;
+    expect(d.map(x => [x.label, x.category])).toEqual([
+      ['Water consumption', 'water'], ['Water Demand Management Levy', 'water'], ['Sewer monthly charge', 'sewerage'],
+    ]);
+    expect(total(d)).toBe(1074.94);
+    expect(d.every(x => x.isRecoverable)).toBe(true);
+  });
+  it('keeps single-charge services and rates as one line', () => {
+    expect(detail('refuse')).toBeUndefined();
+    expect(detail('rates')).toBeUndefined();
+  });
+  it('breakdown lines carry VAT when the statement listed them excluding VAT', () => {
+    const ex = read(fx.COJ_EXCL_TABLE);
+    const d = ex.items.find(i => i.category === 'electricity')!.details!;
+    expect(d.map(x => x.label)).toEqual(['Electricity consumption', 'Electricity – Service charge', 'Electricity – Network charge']);
+    expect(total(d)).toBe(2468.49);
+    const w = ex.items.find(i => i.category === 'water_sanitation')!.details!;
+    expect(w.map(x => x.label)).toEqual(['Water consumption', 'Water Demand Management Levy', 'Sewer monthly charge']);
+    expect(total(w)).toBe(1074.94);
+  });
+  it('does not offer a breakdown that would not add up', () => {
+    const bad = read(fx.COJ_LOST_MINUS.replace('Service charge                                                                184.56', 'Service charge                                                                134.56'));
+    expect(bad.items.find(i => i.category === 'electricity')!.details).toBeUndefined();
+  });
+  it('levy statements are already one line per charge', () => {
+    const l = read(fx.LEVY_TRANSACTIONS);
+    expect(l.items.every(i => !i.details)).toBe(true);
+    expect(l.items.length).toBe(6);
+  });
+});

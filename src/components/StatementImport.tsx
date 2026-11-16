@@ -6,6 +6,34 @@ import { StatementExtract } from '../types';
 import { errorMessage, formatCurrency, formatDate, formatMonthYear, MONTHS } from '../utils';
 import type { ParsedStatement, ReadProgress } from '../lib/statements';
 
+type ParsedLine = Omit<ParsedStatement['items'][number], 'details'>;
+
+/**
+ * Rows for the review list. `detailed` shows every charge line the statement
+ * printed (consumption, service charge, sewer…); otherwise one row per service.
+ * `vatOn` may differ from what the reader chose, in which case VAT is added
+ * to or removed from the services that carry it.
+ */
+function buildRows(result: ParsedStatement, detailed: boolean, vatOn: boolean): ReviewItem[] {
+  const ratio = result.vatRatio || 1.15;
+  const lines: ParsedLine[] = result.items.flatMap(i => (detailed && i.details?.length ? i.details : [i]));
+  return lines.map(l => {
+    let amount = l.amount;
+    if (l.vatable && vatOn !== result.vatAdded) amount = Math.round((vatOn ? amount * ratio : amount / ratio) * 100) / 100;
+    return {
+      label: l.label,
+      amount: amount.toFixed(2),
+      isRecoverable: l.isRecoverable,
+      vatable: l.vatable,
+      selected: true,
+      note: [
+        l.consumption ? `${l.consumption.value.toLocaleString('en-ZA')} ${l.consumption.unit}` : null,
+        l.readingType === 'estimated' ? 'estimated reading' : l.readingType === 'actual' ? 'actual reading' : null,
+      ].filter(Boolean).join(' · ') || undefined,
+    };
+  });
+}
+
 interface Props {
   propertyId: string;
   /** Month shown in the Running Costs tab — used when the statement has no readable period. */
@@ -63,6 +91,8 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
   const [year, setYear] = useState(defaultYear);
   const [saving, setSaving] = useState(false);
   const [vatOn, setVatOn] = useState(false);
+  // Show every charge line (default) or one line per service.
+  const [detailed, setDetailed] = useState(true);
 
   const thisYear = new Date().getFullYear();
   const years = Array.from(new Set([thisYear - 3, thisYear - 2, thisYear - 1, thisYear, thisYear + 1, year])).sort();
@@ -99,17 +129,8 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
       const y = result.period?.year ?? defaultYear;
       setMonth(m);
       setYear(y);
-      setItems(result.items.map(i => ({
-        label: i.label,
-        amount: i.amount.toFixed(2),
-        isRecoverable: i.isRecoverable,
-        vatable: i.vatable,
-        selected: true,
-        note: [
-          i.consumption ? `${i.consumption.value.toLocaleString('en-ZA')} ${i.consumption.unit}` : null,
-          i.readingType === 'estimated' ? 'estimated reading' : i.readingType === 'actual' ? 'actual reading' : null,
-        ].filter(Boolean).join(' · ') || undefined,
-      })));
+      setDetailed(true);
+      setItems(buildRows(result, true, result.vatAdded));
       setVatOn(result.vatAdded);
       setParsed(result);
     } catch (err) {
@@ -197,6 +218,12 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
       if (!Number.isFinite(n)) return i;
       return { ...i, amount: (Math.round((on ? n * ratio : n / ratio) * 100) / 100).toFixed(2) };
     }));
+  };
+  const hasBreakdown = !!parsed && parsed.items.some(i => (i.details?.length ?? 0) > 1);
+  const switchView = (next: boolean) => {
+    if (!parsed || next === detailed) return;
+    setDetailed(next);
+    setItems(buildRows(parsed, next, vatOn));
   };
   const showVatSwitch = !!parsed && parsed.kind !== 'levy' && items.some(i => i.vatable);
   const statementTotal = parsed?.totals.currentCharges;
@@ -342,9 +369,31 @@ export function StatementImport({ propertyId, defaultMonth, defaultYear, onImpor
 
             {/* Items */}
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Charges found ({items.length}) — tick to include, edit if needed
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Charges found ({items.length}) — set who pays for each
+                </p>
+                {hasBreakdown && (
+                  <div className="flex gap-1 p-0.5 bg-surface-100 rounded-lg text-xs font-semibold" role="group" aria-label="How much detail to show">
+                    <button
+                      type="button"
+                      onClick={() => switchView(true)}
+                      aria-pressed={detailed}
+                      className={`px-2.5 py-1 rounded-md transition-colors ${detailed ? 'bg-white shadow-sm text-ink-900' : 'text-ink-500'}`}
+                    >
+                      Every charge
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => switchView(false)}
+                      aria-pressed={!detailed}
+                      className={`px-2.5 py-1 rounded-md transition-colors ${!detailed ? 'bg-white shadow-sm text-ink-900' : 'text-ink-500'}`}
+                    >
+                      One per service
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="space-y-2">
                 {items.map((item, i) => (
                   <div

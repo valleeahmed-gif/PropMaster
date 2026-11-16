@@ -101,7 +101,11 @@ accounts, and body corporate / HOA levy statements, entirely in the browser:
    WebAssembly). Password-protected PDFs prompt for the password.
 2. **Rules** — `parse.ts` finds the charges two ways (CoJ-style service
    sections, and table / transaction rows), in English and Afrikaans.
-3. **Cross-check** — the result is compared with the statement's own
+3. **Breakdown** — each service section is also split into its separate
+   charges (consumption with tariff steps merged, service and network
+   charges, levies, sewer), so every line can be given its own "who pays".
+   A breakdown is only offered when its lines add up to the section total.
+4. **Cross-check** — the result is compared with the statement's own
    "current charges" / "total due". A mismatch lowers the confidence shown
    to the user and, where a printed subtotal disagrees with its detail
    lines, the statement total decides which one is right.
