@@ -288,3 +288,29 @@ describe('full breakdown: every charge line separately', () => {
     expect(l.items.length).toBe(6);
   });
 });
+
+describe('real layout: City of Johannesburg rates + refuse account', () => {
+  const r = read(fx.COJ_REAL_RATES_REFUSE);
+  it('reads rates net of the R300 000 rebate, and refuse incl. VAT', () => {
+    expect(amounts(r)).toEqual({ 'Refuse Removal': 300.15, 'Rates': 212.61 });
+  });
+  it('reconciles to the statement', () => {
+    expect(r.totals.currentCharges).toBe(512.76);
+    expect(r.reconciled).toBe(true);
+    expect(r.confidence).toBe('high');
+    expect(r.vatAdded).toBe(false);
+  });
+  it('identifies the statement', () => {
+    expect(r.issuer).toBe('City of Johannesburg');
+    expect(r.accountNumber).toBe('550000000');
+    expect(r.period).toEqual({ month: 11, year: 2026 });
+    expect(r.dueDate).toBe('2026-11-25');
+  });
+  it('does not warn about arrears when the previous balance was paid', () => {
+    expect(r.warnings.join(' ')).not.toMatch(/previous balance/);
+  });
+  it('still warns when part of the previous balance is unpaid', () => {
+    const owing = read(fx.COJ_REAL_RATES_REFUSE.replace('- 512.76', '- 200.00').replace(/Sub Total(\s+)0\.00/, 'Sub Total$1312.76'));
+    expect(owing.warnings.join(' ')).toMatch(/R\s?312[.,]76 from earlier statements is still unpaid/);
+  });
+});

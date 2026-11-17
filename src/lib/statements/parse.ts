@@ -72,7 +72,13 @@ const HEADERS: { category: ChargeCategory; re: RegExp }[] = [
 const NOT_HEADER_RE = /levy|charge|fee|tariff|step|consumption|basic|demand|service|network|surcharge|block|reading|meter|period|rebate|less\b|interest/;
 
 function headerCategory(text: string): ChargeCategory | null {
-  const d = describe(text).toLowerCase().replace(/[:\-–]+$/, '').trim();
+  // CoJ headings also hold the entity's VAT number and the column titles:
+  // "Property Rates   VAT 4760117194   Sub - Total   Total Amount".
+  const d = describe(text).toLowerCase()
+    .replace(/\bvat(\s*(reg(istration)?\.?)?\s*(no\.?|nr\.?|number)?)?\s*[:#]?\s*\d{10}\b/g, ' ')
+    .replace(/\bsub\s*-?\s*total\b|\btotal(\s+amount)?\b|\bamount\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[:\-–]+$/, '').trim();
   if (!d || d.length > 44) return null;
   if ((d.match(/\d/g) || []).length > 2) return null;
   for (const h of HEADERS) {
@@ -136,6 +142,18 @@ function sectionTotal(sec: Section): SectionResult {
   entries.forEach((e, i) => {
     const value = e.value as number;
     const blockSum = block.reduce((s, v) => s + v, 0);
+    if (e.vat && e.amounts.length >= 2) {
+      const vatAmount = e.amounts[e.amounts.length - 2];
+      // Base is the lines above, or the heading's own amount when it carried one.
+      const base = block.length ? blockSum : total === 0 ? (sec.headerAmount ?? 0) : 0;
+      if (near(base + vatAmount, value, 0.11)) {
+        detailSum += vatAmount;
+        lastSubtotal = value;
+        closeBlock(value);
+        sawTotalLine = true;
+        return;
+      }
+    }
     if (e.bare || e.totalLabel) lastSubtotal = value; else detailSum += value;
     if (e.totalLabel) {
       if (block.length && !near(blockSum, value, 0.11)) confirmed = false;
@@ -252,7 +270,7 @@ function sectionDetails(sec: Section, res: SectionResult): ParsedDetail[] {
     if (desc.replace(/[^a-z]/gi, '').length === 0) continue;                                  // printed subtotal
     if (/^\W*((sub\s?-?)?total|totaal|amount incl|incl(uding|\.)?\s*vat)/i.test(desc)) continue;
     const value = amounts[amounts.length - 1];
-    if (/\b(vat|btw)\b/i.test(desc)) { vatSum += value; continue; }
+    if (/\b(vat|btw)\b/i.test(desc)) { vatSum += amounts.length >= 2 ? amounts[amounts.length - 2] : value; continue; }
 
     // Tariff steps / blocks of one meter are one cost: consumption.
     if (/^\W*(charges?\s*:?\s*)?(step|block|tier|trap|blok)\s*\d/i.test(desc)) {
@@ -345,6 +363,13 @@ function parseSections(lines: Line[], targets: number[]): Candidate {
     if (cat) {
       const amounts = findAmounts(text);
       const headerAmount = amounts.length ? amounts[amounts.length - 1].value : null;
+      // "Refuse Residential … 261.00" right under the "PIKITUP / Refuse"
+      // heading is the section's first charge line, not a new section.
+      if (cur && family(cur.category) === family(cat) && headerAmount !== null
+          && cur.headerAmount === null && cur.lines.every(l => chargeAmounts(l).length === 0)) {
+        cur.lines.push(text);
+        continue;
+      }
       // "Johannesburg Water" → "Water & Sanitation" → "Sewer" are one section
       // unless the previous part already printed its own subtotal.
       if (cur && family(cur.category) === family(cat) && headerAmount === null && !endsWithSubtotal(cur)) {
@@ -697,6 +722,10 @@ interface Facts {
   currentIncl?: number;
   vat?: number;
   previousBalance?: number;
+  /** Payments received since the previous statement (positive number). */
+  paymentsReceived?: number;
+  /** "Sub Total" after payments: what is left of the previous balance. */
+  balanceAfterPayments?: number;
   totalDue?: number;
 }
 
@@ -728,6 +757,10 @@ function readFacts(lines: Line[]): Facts {
     if (amount !== undefined) {
       if (facts.previousBalance === undefined && /previous (account )?balance|balance brought forward|brought forward|opening balance|balance b\/?f|vorige balans|saldo oorgebring/.test(low)) {
         facts.previousBalance = amount;
+      } else if (facts.kind === 'municipal' && facts.previousBalance !== undefined && facts.paymentsReceived === undefined && /incoming payment|payments? received|less:?\s*payments?|betaling ontvang/.test(low)) {
+        facts.paymentsReceived = Math.abs(amount);
+      } else if (facts.kind === 'municipal' && facts.previousBalance !== undefined && facts.balanceAfterPayments === undefined && /^\W*sub\s?-?total\b/.test(low)) {
+        facts.balanceAfterPayments = amount;
       } else if (/current (charges?|account|month)[^\n]*excl|charges?\s*\(?excl/.test(low)) {
         if (facts.currentExcl === undefined) { facts.currentExcl = amount; exclIndex = idx; }
       } else if (/current charges?[^\n]*incl|total current|current (charges?|month'?s? (charges?|total))|total (charges|levies) (for )?(the |this )?(month|period)|huidige heffings/.test(low)) {
@@ -949,7 +982,13 @@ export function parseStatement(lines: Line[], method: 'text' | 'ocr' = 'text'): 
     if (it.readingType === 'estimated') warnings.push(`${it.label} was billed on an ESTIMATED reading — the amount may be corrected on a later statement.`);
   }
   if (facts.previousBalance && facts.previousBalance > 0.005) {
-    warnings.push(`The statement carries a previous balance of ${fmt(facts.previousBalance)}. Arrears and payments are not included in the items below.`);
+    const unpaid = facts.balanceAfterPayments
+      ?? (facts.paymentsReceived !== undefined ? round2(facts.previousBalance - facts.paymentsReceived) : facts.previousBalance);
+    if (unpaid > 0.005) {
+      warnings.push(facts.paymentsReceived !== undefined || facts.balanceAfterPayments !== undefined
+        ? `${fmt(unpaid)} from earlier statements is still unpaid on this account. Arrears are not included in the items below.`
+        : `The statement carries a previous balance of ${fmt(facts.previousBalance)}. Arrears and payments are not included in the items below.`);
+    }
   }
   if (items.some(i => i.category === 'interest')) {
     warnings.push('Interest was charged on this account (usually for late payment).');

@@ -264,3 +264,41 @@ export const WECONNECTU_ITEMISED = WECONNECTU_STATEMENT.replace(
     col(['2026-11-01', 0], ['Invoice', 12], ['CSOS levy', 26], ['27.00', 60, 'r'], ['0', 72, 'r'], ['0.00', 88, 'r']),
   ].join('\n'),
 );
+
+// Real City of Johannesburg layout (sectional-title unit: rates + refuse
+// only), copied from an actual statement with every personal detail replaced.
+// Section headings carry the VAT registration number and column titles; each
+// section ends with "VAT: x%  <vat>  <section total>" on one line.
+export const COJ_REAL_RATES_REFUSE = [
+  col(['VAT NO: CITY OF JOHANNESBURG: 4760117194', 60], ['VAT NO: PIKITUP:', 98], ['4790191292', 118]),
+  col(['TAX INVOICE', 0]),
+  col(['SAMPLE OWNER', 0], ['Date', 60], ['2026/11/10', 80]),
+  col(['1 SAMPLE STREET', 0], ['Statement for', 60], ['November 2026', 80]),
+  col(['Stand Size', 0], ['Date of Valuation', 30], ['Municipal Valuation', 60]),
+  col(['64 m2', 0], ['2023/07/01', 30], ['Market Value R 558,000.00', 60]),
+  col(['Invoice Number: 28000000000', 0], ['Next Reading Date: 2026/11/25', 60]),
+  col(['Account Number: 550000000', 0], ['PIN CODE: 000000', 90]),
+  col(['Previous Account Balance', 0], ['512.76', 110, 'r']),
+  col(['Less: Incoming Payment (Last Payment Made 2026/10/26)', 0], ['- 512.76', 110, 'r']),
+  col(['Sub Total', 0], ['0.00', 110, 'r']),
+  col(['Current Charges (Excl. VAT)', 0], ['473.61', 110, 'r']),
+  col(['VAT @ 15%', 0], ['39.15', 110, 'r']),
+  col(['Total Due', 86], ['512.76', 110, 'r']),
+  col(['90 DAYS +', 0], ['60 DAYS', 12], ['30 DAYS', 22], ['CURRENT', 32], ['TOTAL AMOUNT OUTSTANDING', 50]),
+  col(['0.00', 6, 'r'], ['0.00', 18, 'r'], ['0.00', 28, 'r'], ['512.76', 40, 'r'], ['512.76', 68, 'r'], ['Due Date', 86], ['2026/11/25', 110, 'r']),
+  '',
+  col(['Account Number: 550000000', 0]),
+  col(['City of Johannesburg', 0]),
+  col(['Property Rates', 0], ['VAT 4760117194', 66], ['Sub - Total', 84], ['Total', 100]),
+  col(['Amount', 98]),
+  col(['Category of Property: Property Rates Residential', 0]),
+  col(['R 558,000.00 X R 0.0098890 / 12 ( Billing Period 2026/11 )', 0], ['459.84', 94, 'r']),
+  col(['Less rates on first R300 000.00 of market value', 0], ['- 247.23', 94, 'r']),
+  col(['VAT: 0 %', 0], ['0.00', 94, 'r'], ['212.61', 108, 'r']),
+  col(['PIKITUP', 0]),
+  col(['Refuse', 0], ['VAT 4790191292', 66], ['Sub - Total', 84], ['Total', 100]),
+  col(['Amount', 98]),
+  col(['Refuse Residential ( Billing Period 2026/11 )', 0], ['261.00', 94, 'r']),
+  col(['VAT: 15.00%', 0], ['39.15', 94, 'r'], ['300.15', 108, 'r']),
+  col(['Current Charges (Including VAT)', 0], ['512.76', 104, 'r']),
+].join('\n');
